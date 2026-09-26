@@ -40,6 +40,15 @@ export function resolvedPackages(lock) {
   return out;
 }
 
+const OSV_VULN_URL = "https://api.osv.dev/v1/vulns/";
+
+/** Fetch full advisory details (querybatch returns only IDs). */
+async function fetchVulnDetails(id, fetchImpl) {
+  const res = await fetchImpl(OSV_VULN_URL + id);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 /** Query OSV for vulnerabilities affecting the given packages. */
 export async function queryOsv(packages, fetchImpl = fetch) {
   const results = [];
@@ -57,7 +66,11 @@ export async function queryOsv(packages, fetchImpl = fetch) {
     });
     if (!res.ok) throw new Error(`OSV query failed: HTTP ${res.status}`);
     const body = await res.json();
-    results.push(...(body.results ?? []));
+    for (const result of body.results ?? []) {
+      const ids = (result?.vulns ?? []).map((v) => v.id).filter(Boolean);
+      const details = await Promise.all(ids.map((id) => fetchVulnDetails(id, fetchImpl)));
+      results.push({ vulns: details.filter(Boolean) });
+    }
   }
   return results;
 }
