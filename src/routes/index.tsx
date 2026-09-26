@@ -363,8 +363,9 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
   }, [attachments, chat, mode, textInput]);
 
   const clearDesk = useCallback(async () => {
-    const { error } = await supabase.from("chat_messages").delete().not("sdk_id", "is", null);
-    if (error) {
+    try {
+      await clearDeskMessages();
+    } catch {
       setConfirmClear(false);
       return;
     }
@@ -374,6 +375,7 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
     setConfirmClear(false);
     queryClient.setQueryData(["chat-history"], []);
   }, [chat, queryClient]);
+
 
   const jumpTo = useCallback((index: number) => {
     setSearchOpen(false);
