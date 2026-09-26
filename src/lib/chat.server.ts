@@ -67,6 +67,11 @@ async function persistMessages(messages: UIMessage[]) {
   const { error } = await supabaseAdmin
     .from("chat_messages")
     .upsert(rows, { onConflict: "sdk_id" });
+  console.log(
+    "[persist]",
+    rows.map((row) => `${row.role}:${row.sdk_id}:${row.content ? "json" : "null"}`).join(","),
+    error ? `ERR ${error.code} ${error.message}` : "ok",
+  );
   if (error) throw new Error(`Could not save the conversation: ${error.message}`);
 }
 
