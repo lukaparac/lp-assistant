@@ -88,6 +88,33 @@ function filesOf(message: UIMessage) {
   );
 }
 
+function readAsDataURL(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Composer attachments live as blob: URLs, which only exist in this tab.
+// Read them back here so the bytes can travel to the server as data URLs.
+function blobToDataURL(url: string) {
+  return fetch(url)
+    .then((response) => response.blob())
+    .then(readAsDataURL);
+}
+
+async function toDataFileParts(parts: FileUIPart[]): Promise<FileUIPart[]> {
+  return Promise.all(
+    parts.map(async (part) => {
+      const url = typeof part.url === "string" ? part.url : "";
+      if (!url || url.startsWith("data:")) return part;
+      return { ...part, url: await blobToDataURL(url) };
+    }),
+  );
+}
+
 function reasoningOf(message: UIMessage) {
   return (message.parts ?? []).filter(
     (part): part is Extract<Part, { type: "reasoning" }> => part.type === "reasoning",
@@ -338,17 +365,28 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
 
   const send = useCallback(() => {
     const text = textInput.value.trim();
-    if (!text && attachments.files.length === 0) return;
+    const pending = [...attachments.files];
+    if (!text && pending.length === 0) return;
 
-    chat.sendMessage({
-      text: text || "Work on the attached file.",
-      files: attachments.files,
-      metadata: { mode: mode ?? null, createdAt: new Date().toISOString() },
-    });
-
-    textInput.clear();
-    attachments.clear();
-    setConfirmClear(false);
+    // Read the attachments before the composer clears them: clearing revokes
+    // the blob URLs the chips point at.
+    void (async () => {
+      let files: FileUIPart[];
+      try {
+        files = await toDataFileParts(pending);
+      } catch (error) {
+        console.error(error);
+        return;
+      }
+      textInput.clear();
+      attachments.clear();
+      setConfirmClear(false);
+      chat.sendMessage({
+        text: text || "Work on the attached file.",
+        files,
+        metadata: { mode: mode ?? null, createdAt: new Date().toISOString() },
+      });
+    })();
   }, [attachments, chat, mode, textInput]);
 
   const clearDesk = useCallback(async () => {
