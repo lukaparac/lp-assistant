@@ -30,7 +30,7 @@ export const fetchHistory = createServerFn({ method: "GET" }).handler(async () =
         id: content.id || row.sdk_id,
         role: row.role as "user" | "assistant",
         metadata: { ...((content.metadata ?? {}) as object), createdAt: row.created_at },
-      } as UIMessage;
+      } as unknown as Record<string, unknown>;
     });
 });
 
