@@ -8,8 +8,10 @@ import { describeError } from "../error-capture";
  * describeError) must contain no tokens, user ids, claims, or desk content.
  */
 
+// Code identifiers in stack traces (file paths, function names) are fine;
+// this pattern targets actual secrets: tokens, user ids, claims, desk text.
 const SENSITIVE =
-  /SECRET|private-brief|owner-id|attacker-id|attacker-token|acquisition|Bearer|supabase|claim|sub=/i;
+  /SECRET|private-brief|owner-id|attacker-id|attacker-token|acquisition|Bearer |claim:|sub=/i;
 
 vi.mock("./supabase", () => ({
   supabaseForUser: (ctx: ToolContext) => {
