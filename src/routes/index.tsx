@@ -197,7 +197,6 @@ async function countTurns(): Promise<number> {
   return await fetchTurnCount();
 }
 
-
 function Desk() {
   const history = useQuery({
     queryKey: ["chat-history"],
@@ -375,7 +374,6 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
     setConfirmClear(false);
     queryClient.setQueryData(["chat-history"], []);
   }, [chat, queryClient]);
-
 
   const jumpTo = useCallback((index: number) => {
     setSearchOpen(false);

@@ -50,10 +50,7 @@ export const fetchTurnCount = createServerFn({ method: "GET" }).handler(async ()
 
 export const clearDeskMessages = createServerFn({ method: "POST" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { error } = await supabaseAdmin
-    .from("chat_messages")
-    .delete()
-    .not("sdk_id", "is", null);
+  const { error } = await supabaseAdmin.from("chat_messages").delete().not("sdk_id", "is", null);
 
   if (error) throw new Error(error.message);
   return { ok: true };

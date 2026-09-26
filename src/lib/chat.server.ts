@@ -168,7 +168,13 @@ function sanitizeIncoming(raw: unknown): UIMessage | null {
 
   const parts = candidate.parts.flatMap((part): UIMessage["parts"] => {
     if (!part || typeof part !== "object") return [];
-    const p = part as { type?: unknown; text?: unknown; url?: unknown; mediaType?: unknown; filename?: unknown };
+    const p = part as {
+      type?: unknown;
+      text?: unknown;
+      url?: unknown;
+      mediaType?: unknown;
+      filename?: unknown;
+    };
     if (p.type === "text" && typeof p.text === "string") {
       return [{ type: "text", text: p.text }];
     }
@@ -188,7 +194,8 @@ function sanitizeIncoming(raw: unknown): UIMessage | null {
   if (parts.length === 0) return null;
 
   return {
-    id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
+    id:
+      typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
     role: "user",
     parts,
     ...(candidate.metadata && typeof candidate.metadata === "object"
@@ -216,7 +223,6 @@ async function persistMessages(messages: UIMessage[]) {
     .upsert(rows, { onConflict: "sdk_id" });
   if (error) throw new Error(`Could not save the conversation: ${error.message}`);
 }
-
 
 export async function handleChat(request: Request): Promise<Response> {
   const apiKey = process.env["LOVABLE_API_KEY"];
@@ -264,7 +270,6 @@ export async function handleChat(request: Request): Promise<Response> {
 
   const history = [...saved.filter((message) => message.id !== incoming.id), incoming];
   const modeName = modeLabel(mode);
-
 
   let modelMessages;
   try {
