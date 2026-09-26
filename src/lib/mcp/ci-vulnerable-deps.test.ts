@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-// @ts-expect-error plain .mjs script has no type declarations
 import {
   actionableVulns,
   parseLockfile,
   queryOsv,
   resolvedPackages,
   runCheck,
+  // @ts-expect-error plain .mjs script has no type declarations
 } from "../../../scripts/check-vulnerable-deps.mjs";
 
 /**
