@@ -29,6 +29,7 @@ import {
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Tool, ToolContent, ToolHeader } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { supabase } from "@/integrations/supabase/client";
 import { clearDeskMessages, fetchHistory, fetchTurnCount } from "@/lib/desk.functions";
 import { DESK_MODES, isModeId, modeLabel, modePlaceholder, type ModeId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
@@ -198,6 +199,28 @@ async function countTurns(): Promise<number> {
 }
 
 function Desk() {
+  const [session, setSession] = useState<"loading" | "in" | "out">("loading");
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ? "in" : "out"));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ? "in" : "out"));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+  if (session === "out") {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-paper px-6 text-center">
+        <h1 className="text-base font-semibold text-ink">This desk is private</h1>
+        <p className="max-w-sm text-sm text-ink-soft">Sign in as the desk's owner to open it.</p>
+        <a className="text-sm font-medium text-accent underline" href="/login?next=/">
+          Sign in
+        </a>
+      </div>
+    );
+  }
+  if (session === "loading") return <div className="h-dvh bg-paper" />;
+  return <DeskLoaded />;
+}
+
+function DeskLoaded() {
   const history = useQuery({
     queryKey: ["chat-history"],
     queryFn: loadHistory,
@@ -222,7 +245,8 @@ function Desk() {
       <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-paper px-6 text-center">
         <h1 className="text-base font-semibold text-ink">The desk didn't open</h1>
         <p className="max-w-sm text-sm text-ink-soft">
-          Your saved conversation couldn't be read. Try reloading — nothing has been lost.
+          Your saved conversation couldn't be read. Only the desk's owner can open it — if that's
+          you, try reloading.
         </p>
       </div>
     );
@@ -256,6 +280,11 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
       new DefaultChatTransport({
         api: "/api/public/chat",
         body: () => ({ mode: modeRef.current ?? null }),
+        headers: async (): Promise<Record<string, string>> => {
+          const { data } = await supabase.auth.getSession();
+          const token = data.session?.access_token;
+          return token ? { Authorization: `Bearer ${token}` } : {};
+        },
       }),
     [],
   );
