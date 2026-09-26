@@ -28,7 +28,10 @@ const EXEMPT_RE = [/\.test\.ts$/, /\/__tests__\//];
 // redactor at import time. Everything else that emits output is a bypass.
 const FORBIDDEN = [
   { re: /console\.(log|warn|info|debug|trace|group)\s*\(/, label: "raw console.$1 call (only console.error is redacted)" },
+  { re: /console\[["'](log|warn|info|debug|trace|group)["']\]\s*\(/, label: "bracket-notation console.$1 call" },
+  { re: /console\[[A-Za-z_$][\w$]*\]\s*\(/, label: "computed console[...] call" },
   { re: /process\.std(out|err)\.write\s*\(/, label: "direct process.$1 write" },
+  { re: /process\.std(?:out|err)\[(?:["']write["']|[A-Za-z_$][\w$]*)\]\s*\(/, label: "computed process std stream write" },
   { re: /from\s+["'](pino|winston|bunyan|log4js|debug)["']/, label: "third-party logger import" },
 ];
 
@@ -39,7 +42,9 @@ const ALIAS_BINDINGS = [
   /\{\s*([^}]*?)\s*\}\s*=\s*console\b/, // const { log } = console
   /\{\s*([^}]*?)\s*\}\s*=\s*process\.std(?:out|err)\b/, // const { write } = process.stdout
   /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*console\.(log|warn|info|debug|trace|group)\b/,
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*console\[["'](log|warn|info|debug|trace|group)["']\]/, // const l = console["log"]
   /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.std(?:out|err)\.write\b/,
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.std(?:out|err)\[["']write["']\]/, // const w = process.stdout["write"]
 ];
 
 function collectAliases(line, aliases) {
@@ -61,15 +66,38 @@ function collectAliases(line, aliases) {
     }
     return;
   }
-  m = line.match(ALIAS_BINDINGS[2]);
-  if (m) {
-    aliases.set(m[1], `console.${m[2]}`);
-    return;
+  for (const idx of [2, 3]) {
+    m = line.match(ALIAS_BINDINGS[idx]);
+    if (m) {
+      aliases.set(m[1], `console.${m[2]}`);
+      return;
+    }
   }
-  m = line.match(ALIAS_BINDINGS[3]);
-  if (m) {
-    aliases.set(m[1], "process std stream write");
+  for (const idx of [4, 5]) {
+    m = line.match(ALIAS_BINDINGS[idx]);
+    if (m) {
+      aliases.set(m[1], "process std stream write");
+      return;
+    }
   }
+}
+
+// A module that binds its own "console" or "process" (parameter, local
+// variable, or import) shadows the global: its console.x / process.x calls
+// are not the real logging paths and must not be flagged.
+const SHADOW_RE = [
+  { name: "console", re: /(?:function[^(]*\([^)]*\bconsole\b|(?:const|let|var)\s+console\s*=|import\s+.*\bconsole\b.*from|=>.*\bconsole\b\s*=>|\(\s*console\s*[,)])/ },
+  { name: "process", re: /(?:function[^(]*\([^)]*\bprocess\b|(?:const|let|var)\s+process\s*=|import\s+.*\bprocess\b.*from|\(\s*process\s*[,)])/ },
+];
+
+function shadowedGlobals(lines) {
+  const shadowed = new Set();
+  for (const line of lines) {
+    for (const { name, re } of SHADOW_RE) {
+      if (re.test(line)) shadowed.add(name);
+    }
+  }
+  return shadowed;
 }
 
 /** True when rel points at a file the check must skip. */
@@ -85,21 +113,26 @@ export function scanText(rel, text) {
   if (isExempt(rel)) return [];
   const findings = [];
   const lines = text.split("\n");
+  const shadowed = shadowedGlobals(lines);
   const aliases = new Map();
   for (const line of lines) {
     if (/^\s*(\/\/|\*)/.test(line)) continue;
     collectAliases(line, aliases);
   }
+  const ruleApplies = (label) =>
+    !(shadowed.has("console") && /console/.test(label)) &&
+    !(shadowed.has("process") && /process/.test(label));
   lines.forEach((line, i) => {
     if (/^\s*(\/\/|\*)/.test(line)) return; // skip comments
     for (const { re, label } of FORBIDDEN) {
       const m = line.match(re);
-      if (m) {
+      if (m && ruleApplies(label)) {
         findings.push({ line: i + 1, label: label.replace("$1", m[1]), source: line.trim() });
       }
     }
     if (ALIAS_BINDINGS.some((re) => re.test(line))) return; // binding line, not a call
     for (const [name, source] of aliases) {
+      if (!ruleApplies(source)) continue;
       const callRe = new RegExp(`(?<![.\\w$])${name}\\s*\\(`);
       if (callRe.test(line)) {
         findings.push({ line: i + 1, label: `aliased ${source} call via "${name}"`, source: line.trim() });
