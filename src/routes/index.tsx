@@ -210,9 +210,9 @@ function Desk() {
     return (
       <div className="flex h-dvh flex-col bg-paper">
         <div className="flex flex-1 items-center justify-center">
-          <span className="font-mono text-[11px] tracking-wide text-ink-faint uppercase">
+          <div className="font-mono text-[11px] tracking-wide text-ink-faint uppercase">
             <Shimmer>Opening the desk…</Shimmer>
-          </span>
+          </div>
         </div>
       </div>
     );
@@ -726,9 +726,9 @@ function AssistantTurn({
             <MessageResponse>{text}</MessageResponse>
           </MessageContent>
         ) : streaming ? (
-          <p className="text-[13px] text-ink-faint">
+          <div className="text-[13px] text-ink-faint">
             <Shimmer>Thinking…</Shimmer>
-          </p>
+          </div>
         ) : null}
 
         {sources.length > 0 ? (
