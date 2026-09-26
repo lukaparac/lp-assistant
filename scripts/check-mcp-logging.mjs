@@ -28,7 +28,10 @@ const EXEMPT_RE = [/\.test\.ts$/, /\/__tests__\//];
 // redactor at import time. Everything else that emits output is a bypass.
 const FORBIDDEN = [
   { re: /console\.(log|warn|info|debug|trace|group)\s*\(/, label: "raw console.$1 call (only console.error is redacted)" },
+  { re: /console\[["'](log|warn|info|debug|trace|group)["']\]\s*\(/, label: "bracket-notation console.$1 call" },
+  { re: /console\[[A-Za-z_$][\w$]*\]\s*\(/, label: "computed console[...] call" },
   { re: /process\.std(out|err)\.write\s*\(/, label: "direct process.$1 write" },
+  { re: /process\.std(?:out|err)\[(?:["']write["']|[A-Za-z_$][\w$]*)\]\s*\(/, label: "computed process std stream write" },
   { re: /from\s+["'](pino|winston|bunyan|log4js|debug)["']/, label: "third-party logger import" },
 ];
 
@@ -39,7 +42,9 @@ const ALIAS_BINDINGS = [
   /\{\s*([^}]*?)\s*\}\s*=\s*console\b/, // const { log } = console
   /\{\s*([^}]*?)\s*\}\s*=\s*process\.std(?:out|err)\b/, // const { write } = process.stdout
   /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*console\.(log|warn|info|debug|trace|group)\b/,
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*console\[["'](log|warn|info|debug|trace|group)["']\]/, // const l = console["log"]
   /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.std(?:out|err)\.write\b/,
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.std(?:out|err)\[["']write["']\]/, // const w = process.stdout["write"]
 ];
 
 function collectAliases(line, aliases) {
