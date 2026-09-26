@@ -250,8 +250,21 @@ export async function handleChat(request: Request): Promise<Response> {
     );
   }
 
-  const history = messages as UIMessage[];
+  // Only the newest turn is taken from the request, and always as a user turn.
+  const incoming = sanitizeIncoming(messages[messages.length - 1]);
+  if (!incoming) return jsonError(400, "That message couldn't be read. Try sending it again.");
+
+  let saved: UIMessage[];
+  try {
+    saved = await loadPersistedHistory();
+  } catch (error) {
+    console.error(error);
+    return jsonError(500, "The desk's saved conversation couldn't be opened just now.");
+  }
+
+  const history = [...saved.filter((message) => message.id !== incoming.id), incoming];
   const modeName = modeLabel(mode);
+
 
   let modelMessages;
   try {
