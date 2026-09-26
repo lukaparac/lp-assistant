@@ -68,6 +68,7 @@
     "input-otp": "^1.4.2",
     "js-yaml": "^5.4.2",
     "lucide-react": "^0.575.0",
+    "minimatch": "^10.2.6",
     "motion": "^13.4.4",
     "nanoid": "^6.0.1",
     "react": "^19.2.0",
