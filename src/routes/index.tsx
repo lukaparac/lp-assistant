@@ -29,7 +29,7 @@ import {
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Tool, ToolContent, ToolHeader } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { supabase } from "@/integrations/supabase/client";
+import { clearDeskMessages, fetchHistory, fetchTurnCount } from "@/lib/desk.functions";
 import { DESK_MODES, isModeId, modeLabel, modePlaceholder, type ModeId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 
@@ -189,40 +189,12 @@ function fileSize(bytes: number) {
 
 /* ------------------------------------------------------------------- loading */
 
-type HistoryRow = {
-  sdk_id: string;
-  role: "user" | "assistant";
-  content: UIMessage;
-  created_at: string;
-};
-
 async function loadHistory(): Promise<UIMessage[]> {
-  const { data, error } = await supabase
-    .from("chat_messages")
-    .select("sdk_id, role, content, created_at")
-    .order("created_at", { ascending: true });
-
-  if (error) throw new Error(error.message);
-
-  return ((data ?? []) as unknown as HistoryRow[]).map((row) => {
-    const content = row.content ?? ({} as UIMessage);
-    return {
-      ...content,
-      id: content.id ?? row.sdk_id,
-      role: row.role,
-      metadata: { ...(content.metadata ?? {}), createdAt: row.created_at },
-    } as UIMessage;
-  });
+  return JSON.parse(await fetchHistory()) as UIMessage[];
 }
 
 async function countTurns(): Promise<number> {
-  const { count, error } = await supabase
-    .from("chat_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("role", "user");
-
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  return await fetchTurnCount();
 }
 
 function Desk() {
@@ -390,8 +362,9 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
   }, [attachments, chat, mode, textInput]);
 
   const clearDesk = useCallback(async () => {
-    const { error } = await supabase.from("chat_messages").delete().not("sdk_id", "is", null);
-    if (error) {
+    try {
+      await clearDeskMessages();
+    } catch {
       setConfirmClear(false);
       return;
     }

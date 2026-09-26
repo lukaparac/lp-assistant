@@ -8,6 +8,13 @@
       "when": 1790455876419,
       "tag": "0000_create_chat_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790462793501,
+      "tag": "0001_lock_down_chat_messages",
+      "breakpoints": true
     }
   ]
 }

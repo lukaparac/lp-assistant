@@ -124,6 +124,86 @@ async function inlineTextFiles(messages: UIMessage[]): Promise<UIMessage[]> {
   );
 }
 
+type HistoryRow = {
+  sdk_id: string;
+  role: string;
+  content: unknown;
+  created_at: string;
+};
+
+/**
+ * The desk's own record of the conversation. Everything the model sees before
+ * the newest question comes from here, never from the caller's request body —
+ * otherwise anyone could hand us a fake "assistant said this" turn.
+ */
+async function loadPersistedHistory(): Promise<UIMessage[]> {
+  const { data, error } = await supabaseAdmin
+    .from("chat_messages")
+    .select("sdk_id, role, content, created_at")
+    .order("created_at", { ascending: true })
+    .limit(MAX_MESSAGES);
+
+  if (error) throw new Error(`Could not read the conversation: ${error.message}`);
+
+  return ((data ?? []) as unknown as HistoryRow[])
+    .filter((row) => row.role === "user" || row.role === "assistant")
+    .map((row) => {
+      const content = (row.content ?? {}) as UIMessage;
+      return {
+        ...content,
+        id: content.id || row.sdk_id,
+        role: row.role as "user" | "assistant",
+      } as UIMessage;
+    });
+}
+
+/**
+ * Only text and files survive from the request body, and the turn is always a
+ * user turn: roles are decided here, not by whoever sent the request.
+ */
+function sanitizeIncoming(raw: unknown): UIMessage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as { id?: unknown; parts?: unknown; metadata?: unknown };
+  if (!Array.isArray(candidate.parts)) return null;
+
+  const parts = candidate.parts.flatMap((part): UIMessage["parts"] => {
+    if (!part || typeof part !== "object") return [];
+    const p = part as {
+      type?: unknown;
+      text?: unknown;
+      url?: unknown;
+      mediaType?: unknown;
+      filename?: unknown;
+    };
+    if (p.type === "text" && typeof p.text === "string") {
+      return [{ type: "text", text: p.text }];
+    }
+    if (p.type === "file" && typeof p.url === "string" && typeof p.mediaType === "string") {
+      return [
+        {
+          type: "file",
+          url: p.url,
+          mediaType: p.mediaType,
+          ...(typeof p.filename === "string" ? { filename: p.filename } : {}),
+        },
+      ];
+    }
+    return [];
+  });
+
+  if (parts.length === 0) return null;
+
+  return {
+    id:
+      typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
+    role: "user",
+    parts,
+    ...(candidate.metadata && typeof candidate.metadata === "object"
+      ? { metadata: candidate.metadata as UIMessage["metadata"] }
+      : {}),
+  } as UIMessage;
+}
+
 async function persistMessages(messages: UIMessage[]) {
   const rows = messages
     .filter(
@@ -176,7 +256,19 @@ export async function handleChat(request: Request): Promise<Response> {
     );
   }
 
-  const history = messages as UIMessage[];
+  // Only the newest turn is taken from the request, and always as a user turn.
+  const incoming = sanitizeIncoming(messages[messages.length - 1]);
+  if (!incoming) return jsonError(400, "That message couldn't be read. Try sending it again.");
+
+  let saved: UIMessage[];
+  try {
+    saved = await loadPersistedHistory();
+  } catch (error) {
+    console.error(error);
+    return jsonError(500, "The desk's saved conversation couldn't be opened just now.");
+  }
+
+  const history = [...saved.filter((message) => message.id !== incoming.id), incoming];
   const modeName = modeLabel(mode);
 
   let modelMessages;
@@ -219,7 +311,7 @@ export async function handleChat(request: Request): Promise<Response> {
   });
 
   // Save what arrived first, but never make the answer wait for the write.
-  await persistMessages(history).catch((error) => console.error(error));
+  await persistMessages([incoming]).catch((error) => console.error(error));
 
   const streamResponse = result.toUIMessageStreamResponse({
     originalMessages: history,
