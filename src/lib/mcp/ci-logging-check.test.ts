@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isExempt, runCheck, scanText } from "../../scripts/check-mcp-logging.mjs";
+// @ts-expect-error plain .mjs script has no type declarations
+import { isExempt, runCheck, scanText } from "../../../scripts/check-mcp-logging.mjs";
 
 /**
  * Fixture-based tests for the logging CI check: every prohibited pattern
