@@ -38,7 +38,9 @@ describe("lockfile parsing", () => {
 
   it("skips non-semver entries like workspace references", () => {
     const pkgs = resolvedPackages(parseLockfile(LOCK_FIXTURE));
-    expect(pkgs.find((p) => p.name === "local-thing")).toBeUndefined();
+    expect(
+      pkgs.find((p: { name: string }) => p.name === "local-thing"),
+    ).toBeUndefined();
   });
 });
 
@@ -88,7 +90,7 @@ describe("OSV querying", () => {
       return { ok: true, json: async () => ({ results: [{ vulns: [] }] }) };
     };
     await queryOsv([{ name: "js-yaml", version: "4.3.0" }], fakeFetch);
-    expect(calls[0].queries).toEqual([
+    expect(calls[0]?.queries).toEqual([
       { package: { name: "js-yaml", ecosystem: "npm" }, version: "4.3.0" },
     ]);
   });
