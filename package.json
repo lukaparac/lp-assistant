@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "vitest run && node scripts/check-mcp-logging.mjs",
+    "test": "vitest run && node scripts/check-mcp-logging.mjs && node scripts/check-vulnerable-deps.mjs",
     "format": "prettier --write ."
   },
   "overrides": {
