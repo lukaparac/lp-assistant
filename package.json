@@ -13,7 +13,8 @@
     "format": "prettier --write ."
   },
   "overrides": {
-    "rolldown": "1.2.1"
+    "rolldown": "1.2.1",
+    "esbuild": "^0.28.2"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.75",
