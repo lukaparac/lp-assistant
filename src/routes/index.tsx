@@ -29,7 +29,7 @@ import {
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Tool, ToolContent, ToolHeader } from "@/components/ai-elements/tool";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { supabase } from "@/integrations/supabase/client";
+import { clearDeskMessages, fetchHistory, fetchTurnCount } from "@/lib/desk.functions";
 import { DESK_MODES, isModeId, modeLabel, modePlaceholder, type ModeId } from "@/lib/modes";
 import { cn } from "@/lib/utils";
 
