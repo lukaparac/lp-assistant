@@ -5,7 +5,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
 function safeNext(next: unknown): string {
-  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  if (typeof next !== "string" || !next.startsWith("/") || /[\\\s]/.test(next)) return "/";
+  if (next.startsWith("//")) return "/";
+  try {
+    const base = "https://desk.invalid";
+    const resolved = new URL(next, base);
+    if (resolved.origin !== base) return "/";
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch {
+    return "/";
+  }
 }
 
 export const Route = createFileRoute("/login")({
