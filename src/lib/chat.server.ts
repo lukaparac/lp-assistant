@@ -124,6 +124,79 @@ async function inlineTextFiles(messages: UIMessage[]): Promise<UIMessage[]> {
   );
 }
 
+type HistoryRow = {
+  sdk_id: string;
+  role: string;
+  content: unknown;
+  created_at: string;
+};
+
+/**
+ * The desk's own record of the conversation. Everything the model sees before
+ * the newest question comes from here, never from the caller's request body —
+ * otherwise anyone could hand us a fake "assistant said this" turn.
+ */
+async function loadPersistedHistory(): Promise<UIMessage[]> {
+  const { data, error } = await supabaseAdmin
+    .from("chat_messages")
+    .select("sdk_id, role, content, created_at")
+    .order("created_at", { ascending: true })
+    .limit(MAX_MESSAGES);
+
+  if (error) throw new Error(`Could not read the conversation: ${error.message}`);
+
+  return ((data ?? []) as unknown as HistoryRow[])
+    .filter((row) => row.role === "user" || row.role === "assistant")
+    .map((row) => {
+      const content = (row.content ?? {}) as UIMessage;
+      return {
+        ...content,
+        id: content.id || row.sdk_id,
+        role: row.role as "user" | "assistant",
+      } as UIMessage;
+    });
+}
+
+/**
+ * Only text and files survive from the request body, and the turn is always a
+ * user turn: roles are decided here, not by whoever sent the request.
+ */
+function sanitizeIncoming(raw: unknown): UIMessage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as { id?: unknown; parts?: unknown; metadata?: unknown };
+  if (!Array.isArray(candidate.parts)) return null;
+
+  const parts = candidate.parts.flatMap((part): UIMessage["parts"] => {
+    if (!part || typeof part !== "object") return [];
+    const p = part as { type?: unknown; text?: unknown; url?: unknown; mediaType?: unknown; filename?: unknown };
+    if (p.type === "text" && typeof p.text === "string") {
+      return [{ type: "text", text: p.text }];
+    }
+    if (p.type === "file" && typeof p.url === "string" && typeof p.mediaType === "string") {
+      return [
+        {
+          type: "file",
+          url: p.url,
+          mediaType: p.mediaType,
+          ...(typeof p.filename === "string" ? { filename: p.filename } : {}),
+        },
+      ];
+    }
+    return [];
+  });
+
+  if (parts.length === 0) return null;
+
+  return {
+    id: typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
+    role: "user",
+    parts,
+    ...(candidate.metadata && typeof candidate.metadata === "object"
+      ? { metadata: candidate.metadata as UIMessage["metadata"] }
+      : {}),
+  } as UIMessage;
+}
+
 async function persistMessages(messages: UIMessage[]) {
   const rows = messages
     .filter(
@@ -143,6 +216,7 @@ async function persistMessages(messages: UIMessage[]) {
     .upsert(rows, { onConflict: "sdk_id" });
   if (error) throw new Error(`Could not save the conversation: ${error.message}`);
 }
+
 
 export async function handleChat(request: Request): Promise<Response> {
   const apiKey = process.env["LOVABLE_API_KEY"];
