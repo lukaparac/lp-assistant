@@ -228,6 +228,11 @@ export async function handleChat(request: Request): Promise<Response> {
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) return jsonError(500, "Lovable AI isn't configured for this workspace yet.");
 
+  const { verifyDeskOwner } = await import("./desk-owner.server");
+  if (!(await verifyDeskOwner(request.headers.get("authorization")))) {
+    return jsonError(401, "Sign in as the desk's owner to use it.");
+  }
+
   if (
     (request.headers.get("content-length") ?? "") &&
     Number(request.headers.get("content-length")) > MAX_BODY_BYTES
