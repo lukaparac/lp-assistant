@@ -88,23 +88,30 @@ function filesOf(message: UIMessage) {
   );
 }
 
-function readAsDataURL(file: File) {
+function readAsDataURL(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
 }
 
-async function toDataFileParts(files: File[]): Promise<FileUIPart[]> {
+// Composer attachments live as blob: URLs, which only exist in this tab.
+// Read them back here so the bytes can travel to the server as data URLs.
+function blobToDataURL(url: string) {
+  return fetch(url)
+    .then((response) => response.blob())
+    .then(readAsDataURL);
+}
+
+async function toDataFileParts(parts: FileUIPart[]): Promise<FileUIPart[]> {
   return Promise.all(
-    files.map(async (file) => ({
-      type: "file" as const,
-      url: await readAsDataURL(file),
-      filename: file.name,
-      mediaType: file.type || "application/octet-stream",
-    })),
+    parts.map(async (part) => {
+      const url = typeof part.url === "string" ? part.url : "";
+      if (!url || url.startsWith("data:")) return part;
+      return { ...part, url: await blobToDataURL(url) };
+    }),
   );
 }
 
