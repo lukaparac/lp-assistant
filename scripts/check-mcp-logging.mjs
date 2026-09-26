@@ -66,15 +66,38 @@ function collectAliases(line, aliases) {
     }
     return;
   }
-  m = line.match(ALIAS_BINDINGS[2]);
-  if (m) {
-    aliases.set(m[1], `console.${m[2]}`);
-    return;
+  for (const idx of [2, 3]) {
+    m = line.match(ALIAS_BINDINGS[idx]);
+    if (m) {
+      aliases.set(m[1], `console.${m[2]}`);
+      return;
+    }
   }
-  m = line.match(ALIAS_BINDINGS[3]);
-  if (m) {
-    aliases.set(m[1], "process std stream write");
+  for (const idx of [4, 5]) {
+    m = line.match(ALIAS_BINDINGS[idx]);
+    if (m) {
+      aliases.set(m[1], "process std stream write");
+      return;
+    }
   }
+}
+
+// A module that binds its own "console" or "process" (parameter, local
+// variable, or import) shadows the global: its console.x / process.x calls
+// are not the real logging paths and must not be flagged.
+const SHADOW_RE = [
+  { name: "console", re: /(?:function[^(]*\([^)]*\bconsole\b|(?:const|let|var)\s+console\s*=|import\s+.*\bconsole\b.*from|=>.*\bconsole\b\s*=>|\(\s*console\s*[,)])/ },
+  { name: "process", re: /(?:function[^(]*\([^)]*\bprocess\b|(?:const|let|var)\s+process\s*=|import\s+.*\bprocess\b.*from|\(\s*process\s*[,)])/ },
+];
+
+function shadowedGlobals(lines) {
+  const shadowed = new Set();
+  for (const line of lines) {
+    for (const { name, re } of SHADOW_RE) {
+      if (re.test(line)) shadowed.add(name);
+    }
+  }
+  return shadowed;
 }
 
 /** True when rel points at a file the check must skip. */
