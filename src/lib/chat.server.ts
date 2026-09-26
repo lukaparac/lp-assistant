@@ -1,5 +1,12 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { convertToModelMessages, stepCountIs, streamText, type ToolSet, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+  type TextUIPart,
+  type ToolSet,
+  type UIMessage,
+} from "ai";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { modeInstruction, modeLabel } from "./modes";
 import {
@@ -61,7 +68,9 @@ function decodeDataUrl(url: string): string | null {
   const match = /^data:([^,]*),([\s\S]*)$/.exec(url);
   if (!match) return null;
 
-  const [, meta, payload] = match;
+  const meta = match[1] ?? "";
+  const payload = match[2];
+  if (payload === undefined) return null;
   try {
     const text = meta.endsWith(";base64")
       ? Buffer.from(payload, "base64").toString("utf8")
@@ -74,7 +83,7 @@ function decodeDataUrl(url: string): string | null {
   }
 }
 
-function inlineFile(name: string, text: string) {
+function inlineFile(name: string, text: string): TextUIPart {
   const body =
     text.length > MAX_INLINE_CHARS
       ? `${text.slice(0, MAX_INLINE_CHARS)}\n… the rest was cut off.`
