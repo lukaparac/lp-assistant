@@ -22,7 +22,9 @@ const anonymousCtx = {
   getClaims: () => undefined,
 } as unknown as ToolContext;
 
-const tools = (mcp as unknown as { tools: Array<{ name: string; handler: Function }> }).tools ?? [];
+type RegisteredTool = { name: string; handler: (args: unknown, ctx: ToolContext) => unknown };
+
+const tools = (mcp as unknown as { tools?: RegisteredTool[] }).tools ?? [];
 
 describe("every registered tool", () => {
   it("registers at least one tool", () => {
