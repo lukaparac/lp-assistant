@@ -88,6 +88,26 @@ function filesOf(message: UIMessage) {
   );
 }
 
+function readAsDataURL(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function toDataFileParts(files: File[]): Promise<FileUIPart[]> {
+  return Promise.all(
+    files.map(async (file) => ({
+      type: "file" as const,
+      url: await readAsDataURL(file),
+      filename: file.name,
+      mediaType: file.type || "application/octet-stream",
+    })),
+  );
+}
+
 function reasoningOf(message: UIMessage) {
   return (message.parts ?? []).filter(
     (part): part is Extract<Part, { type: "reasoning" }> => part.type === "reasoning",
