@@ -155,6 +155,7 @@ export async function handleChat(request: Request): Promise<Response> {
       return describeError(error);
     },
     onEnd: async ({ messages: all }) => {
+      console.log("[onEnd] fired:", all.length, all[all.length - 1]?.role);
       const last = all[all.length - 1];
       if (!last || last.role !== "assistant") return;
       try {
