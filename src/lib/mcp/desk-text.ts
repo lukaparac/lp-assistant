@@ -8,9 +8,7 @@ export function messageText(content: unknown): { text: string; attachments: stri
     .map((p) => p.text as string)
     .join("\n")
     .trim();
-  const attachments = parts
-    .filter((p) => p.type === "file")
-    .map((p) => p.filename ?? "attachment");
+  const attachments = parts.filter((p) => p.type === "file").map((p) => p.filename ?? "attachment");
   return { text, attachments };
 }
 
