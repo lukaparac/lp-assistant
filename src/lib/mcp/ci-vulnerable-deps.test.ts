@@ -82,8 +82,8 @@ describe("actionable vulnerability detection", () => {
 
 describe("OSV querying", () => {
   it("sends one query per package with the npm ecosystem", async () => {
-    const calls = [];
-    const fakeFetch = async (url, opts) => {
+    const calls: { queries: unknown[] }[] = [];
+    const fakeFetch = async (_url: string, opts: { body: string }) => {
       calls.push(JSON.parse(opts.body));
       return { ok: true, json: async () => ({ results: [{ vulns: [] }] }) };
     };
