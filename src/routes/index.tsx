@@ -340,15 +340,21 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
     const text = textInput.value.trim();
     if (!text && attachments.files.length === 0) return;
 
-    chat.sendMessage({
-      text: text || "Work on the attached file.",
-      files: attachments.files,
-      metadata: { mode: mode ?? null, createdAt: new Date().toISOString() },
-    });
-
+    const pending = [...attachments.files];
     textInput.clear();
     attachments.clear();
     setConfirmClear(false);
+
+    // Attachments must travel as data URLs: the browser's blob: references
+    // cannot be resolved on the server.
+    void (async () => {
+      const files = await toDataFileParts(pending);
+      chat.sendMessage({
+        text: text || "Work on the attached file.",
+        files,
+        metadata: { mode: mode ?? null, createdAt: new Date().toISOString() },
+      });
+    })();
   }, [attachments, chat, mode, textInput]);
 
   const clearDesk = useCallback(async () => {
