@@ -365,17 +365,22 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
 
   const send = useCallback(() => {
     const text = textInput.value.trim();
-    if (!text && attachments.files.length === 0) return;
-
     const pending = [...attachments.files];
-    textInput.clear();
-    attachments.clear();
-    setConfirmClear(false);
+    if (!text && pending.length === 0) return;
 
-    // Attachments must travel as data URLs: the browser's blob: references
-    // cannot be resolved on the server.
+    // Read the attachments before the composer clears them: clearing revokes
+    // the blob URLs the chips point at.
     void (async () => {
-      const files = await toDataFileParts(pending);
+      let files: FileUIPart[];
+      try {
+        files = await toDataFileParts(pending);
+      } catch (error) {
+        console.error(error);
+        return;
+      }
+      textInput.clear();
+      attachments.clear();
+      setConfirmClear(false);
       chat.sendMessage({
         text: text || "Work on the attached file.",
         files,
