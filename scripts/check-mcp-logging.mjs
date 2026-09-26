@@ -3,8 +3,9 @@
  * CI check: every logging call in modules that handle MCP or desk data must
  * go through the centralized redaction pipeline (the console.error wrapper
  * installed by src/lib/error-capture.ts). Raw console.log/warn/info/debug,
- * direct process.stdout/stderr writes, or third-party loggers would bypass
- * redaction and could leak tokens, user IDs, or owner data.
+ * direct process.stdout/stderr writes, third-party loggers, or aliased /
+ * destructured copies of any of those would bypass redaction and could leak
+ * tokens, user IDs, or owner data.
  *
  * Scope: src/lib/mcp (the MCP server), the rest of src/lib (chat, desk
  * functions, owner verification), and src/routes/api (HTTP endpoints) —
@@ -31,6 +32,46 @@ const FORBIDDEN = [
   { re: /from\s+["'](pino|winston|bunyan|log4js|debug)["']/, label: "third-party logger import" },
 ];
 
+// Aliasing or destructuring a forbidden logger and calling it under another
+// name is still a bypass. Bindings are collected first, then their calls.
+const CONSOLE_METHODS = new Set(["log", "warn", "info", "debug", "trace", "group"]);
+const ALIAS_BINDINGS = [
+  /\{\s*([^}]*?)\s*\}\s*=\s*console\b/, // const { log } = console
+  /\{\s*([^}]*?)\s*\}\s*=\s*process\.std(?:out|err)\b/, // const { write } = process.stdout
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*console\.(log|warn|info|debug|trace|group)\b/,
+  /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.std(?:out|err)\.write\b/,
+];
+
+function collectAliases(line, aliases) {
+  let m = line.match(ALIAS_BINDINGS[0]);
+  if (m) {
+    for (const part of m[1].split(",")) {
+      const [original, renamed] = part.trim().split(/\s*:\s*|\s*=\s*/);
+      const name = (renamed ?? original)?.trim();
+      if (name && CONSOLE_METHODS.has(original?.trim())) aliases.set(name, "console");
+    }
+    return;
+  }
+  m = line.match(ALIAS_BINDINGS[1]);
+  if (m) {
+    for (const part of m[1].split(",")) {
+      const [, renamed] = part.trim().split(/\s*:\s*|\s*=\s*/);
+      const name = (renamed ?? part.trim())?.trim();
+      if (name) aliases.set(name, "process std stream");
+    }
+    return;
+  }
+  m = line.match(ALIAS_BINDINGS[2]);
+  if (m) {
+    aliases.set(m[1], `console.${m[2]}`);
+    return;
+  }
+  m = line.match(ALIAS_BINDINGS[3]);
+  if (m) {
+    aliases.set(m[1], "process std stream write");
+  }
+}
+
 /** True when rel points at a file the check must skip. */
 export function isExempt(rel) {
   return EXEMPT_FILES.has(rel) || EXEMPT_RE.some((re) => re.test(rel));
@@ -43,12 +84,25 @@ export function isExempt(rel) {
 export function scanText(rel, text) {
   if (isExempt(rel)) return [];
   const findings = [];
-  text.split("\n").forEach((line, i) => {
+  const lines = text.split("\n");
+  const aliases = new Map();
+  for (const line of lines) {
+    if (/^\s*(\/\/|\*)/.test(line)) continue;
+    collectAliases(line, aliases);
+  }
+  lines.forEach((line, i) => {
     if (/^\s*(\/\/|\*)/.test(line)) return; // skip comments
     for (const { re, label } of FORBIDDEN) {
       const m = line.match(re);
       if (m) {
         findings.push({ line: i + 1, label: label.replace("$1", m[1]), source: line.trim() });
+      }
+    }
+    if (ALIAS_BINDINGS.some((re) => re.test(line))) return; // binding line, not a call
+    for (const [name, source] of aliases) {
+      const callRe = new RegExp(`(?<![.\\w$])${name}\\s*\\(`);
+      if (callRe.test(line)) {
+        findings.push({ line: i + 1, label: `aliased ${source} call via "${name}"`, source: line.trim() });
       }
     }
   });
