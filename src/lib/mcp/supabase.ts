@@ -34,7 +34,7 @@ function publishableKey(): string {
 /** Forwards the verified bearer token so access rules run as the signed-in user. */
 export function supabaseForUser(ctx: ToolContext) {
   const token = ctx.getToken();
-  if (!token) throw new Error("supabaseForUser requires a verified OAuth token");
+  if (!token) throw new Error("Not signed in.");
   return createClient(projectUrl(), publishableKey(), {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
