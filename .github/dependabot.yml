@@ -1,0 +1,30 @@
+# Automated dependency updates via Dependabot.
+# Security updates (vulnerable direct AND transitive packages) are enabled
+# automatically by GitHub once this config exists; the schedule below also
+# opens routine version-update PRs so dependencies stay current.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    groups:
+      # Group related packages into one PR to reduce noise.
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      lovable:
+        patterns:
+          - "@lovable.dev/*"
+      build-tools:
+        patterns:
+          - "vite"
+          - "esbuild"
+          - "typescript"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
