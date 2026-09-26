@@ -306,7 +306,7 @@ export async function handleChat(request: Request): Promise<Response> {
   });
 
   // Save what arrived first, but never make the answer wait for the write.
-  await persistMessages(history).catch((error) => console.error(error));
+  await persistMessages([incoming]).catch((error) => console.error(error));
 
   const streamResponse = result.toUIMessageStreamResponse({
     originalMessages: history,
