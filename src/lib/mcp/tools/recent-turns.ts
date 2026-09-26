@@ -6,7 +6,8 @@ import { toTurnJson, type DeskRow } from "../desk-text";
 export default defineTool({
   name: "list_recent_turns",
   title: "List recent desk messages",
-  description: "Return the most recent messages from the Marginalia desk conversation, oldest first.",
+  description:
+    "Return the most recent messages from the Marginalia desk conversation, oldest first.",
   inputSchema: {
     limit: z.number().int().min(1).max(100).default(20).describe("How many messages to return."),
   },
