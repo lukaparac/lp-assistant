@@ -113,10 +113,7 @@ export async function handleChat(request: Request): Promise<Response> {
     return jsonError(400, "The conversation couldn't be read. Try sending your message again.");
   }
 
-  modelMessages.unshift({
-    role: "system",
-    content: `${SYSTEM_PROMPT}\n\nMode: ${modeName}.\n${modeInstruction(mode)}`,
-  });
+  const instructions = `${SYSTEM_PROMPT}\n\nMode: ${modeName}.\n${modeInstruction(mode)}`;
 
   const gateway = createLovableAiGatewayRunIdFetch(getLovableAiGatewayRunId(request));
   const provider = createOpenAI({
@@ -128,6 +125,7 @@ export async function handleChat(request: Request): Promise<Response> {
 
   const result = streamText({
     model: provider.responses(CHAT_MODEL),
+    instructions,
     messages: modelMessages,
     tools: {
       web_search: provider.tools.webSearch({ searchContextSize: "medium" }),
