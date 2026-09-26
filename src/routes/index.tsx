@@ -189,41 +189,14 @@ function fileSize(bytes: number) {
 
 /* ------------------------------------------------------------------- loading */
 
-type HistoryRow = {
-  sdk_id: string;
-  role: "user" | "assistant";
-  content: UIMessage;
-  created_at: string;
-};
-
 async function loadHistory(): Promise<UIMessage[]> {
-  const { data, error } = await supabase
-    .from("chat_messages")
-    .select("sdk_id, role, content, created_at")
-    .order("created_at", { ascending: true });
-
-  if (error) throw new Error(error.message);
-
-  return ((data ?? []) as unknown as HistoryRow[]).map((row) => {
-    const content = row.content ?? ({} as UIMessage);
-    return {
-      ...content,
-      id: content.id ?? row.sdk_id,
-      role: row.role,
-      metadata: { ...(content.metadata ?? {}), createdAt: row.created_at },
-    } as UIMessage;
-  });
+  return (await fetchHistory()) as UIMessage[];
 }
 
 async function countTurns(): Promise<number> {
-  const { count, error } = await supabase
-    .from("chat_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("role", "user");
-
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  return await fetchTurnCount();
 }
+
 
 function Desk() {
   const history = useQuery({
