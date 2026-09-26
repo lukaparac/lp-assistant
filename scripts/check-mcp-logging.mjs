@@ -31,6 +31,30 @@ const FORBIDDEN = [
   { re: /from\s+["'](pino|winston|bunyan|log4js|debug)["']/, label: "third-party logger import" },
 ];
 
+/** True when rel points at a file the check must skip. */
+export function isExempt(rel) {
+  return EXEMPT_FILES.has(rel) || EXEMPT_RE.some((re) => re.test(rel));
+}
+
+/**
+ * Scan one file's source text. rel is the project-relative path (used for
+ * exemption and reporting). Returns a list of { line, label, source }.
+ */
+export function scanText(rel, text) {
+  if (isExempt(rel)) return [];
+  const findings = [];
+  text.split("\n").forEach((line, i) => {
+    if (/^\s*(\/\/|\*)/.test(line)) return; // skip comments
+    for (const { re, label } of FORBIDDEN) {
+      const m = line.match(re);
+      if (m) {
+        findings.push({ line: i + 1, label: label.replace("$1", m[1]), source: line.trim() });
+      }
+    }
+  });
+  return findings;
+}
+
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
@@ -39,29 +63,31 @@ function* walk(dir) {
   }
 }
 
-let scanned = 0;
-let violations = 0;
-for (const dir of SCAN_DIRS) {
-  for (const file of walk(join(ROOT, dir))) {
-    const rel = relative(ROOT, file);
-    if (EXEMPT_FILES.has(rel) || EXEMPT_RE.some((re) => re.test(rel))) continue;
-    scanned++;
-    const lines = readFileSync(file, "utf8").split("\n");
-    lines.forEach((line, i) => {
-      if (/^\s*(\/\/|\*)/.test(line)) return; // skip comments
-      for (const { re, label } of FORBIDDEN) {
-        const m = line.match(re);
-        if (m) {
-          violations++;
-          console.error(`BYPASS ${rel}:${i + 1}: ${label.replace("$1", m[1])}\n  ${line.trim()}`);
-        }
+export function runCheck() {
+  let scanned = 0;
+  const all = [];
+  for (const dir of SCAN_DIRS) {
+    for (const file of walk(join(ROOT, dir))) {
+      const rel = relative(ROOT, file);
+      if (isExempt(rel)) continue;
+      scanned++;
+      for (const f of scanText(rel, readFileSync(file, "utf8"))) {
+        all.push({ rel, ...f });
       }
-    });
+    }
   }
+  return { scanned, findings: all };
 }
 
-if (violations > 0) {
-  console.error(`\n${violations} logging path(s) bypass the redaction pipeline.`);
-  process.exit(1);
+const isMain = process.argv[1] && new URL(import.meta.url).pathname === process.argv[1];
+if (isMain) {
+  const { scanned, findings } = runCheck();
+  for (const f of findings) {
+    console.error(`BYPASS ${f.rel}:${f.line}: ${f.label}\n  ${f.source}`);
+  }
+  if (findings.length > 0) {
+    console.error(`\n${findings.length} logging path(s) bypass the redaction pipeline.`);
+    process.exit(1);
+  }
+  console.log(`Logging check passed: ${scanned} modules scanned, all logging goes through the redaction pipeline.`);
 }
-console.log(`Logging check passed: ${scanned} modules scanned, all logging goes through the redaction pipeline.`);
