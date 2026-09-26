@@ -190,7 +190,7 @@ function fileSize(bytes: number) {
 /* ------------------------------------------------------------------- loading */
 
 async function loadHistory(): Promise<UIMessage[]> {
-  return (await fetchHistory()) as UIMessage[];
+  return JSON.parse(await fetchHistory()) as UIMessage[];
 }
 
 async function countTurns(): Promise<number> {

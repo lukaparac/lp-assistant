@@ -21,7 +21,7 @@ export const fetchHistory = createServerFn({ method: "GET" }).handler(async () =
 
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as unknown as HistoryRow[])
+  const rows = ((data ?? []) as unknown as HistoryRow[])
     .filter((row) => row.role === "user" || row.role === "assistant")
     .map((row) => {
       const content = (row.content ?? {}) as UIMessage;
@@ -30,8 +30,11 @@ export const fetchHistory = createServerFn({ method: "GET" }).handler(async () =
         id: content.id || row.sdk_id,
         role: row.role as "user" | "assistant",
         metadata: { ...((content.metadata ?? {}) as object), createdAt: row.created_at },
-      } as unknown as Record<string, unknown>;
+      } as UIMessage;
     });
+
+  // Serialized as JSON so the server-function boundary stays type-safe.
+  return JSON.stringify(rows);
 });
 
 export const fetchTurnCount = createServerFn({ method: "GET" }).handler(async () => {
