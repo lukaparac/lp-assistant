@@ -15,7 +15,7 @@ vi.mock("./supabase", () => ({
   supabaseForUser: (ctx: ToolContext) => {
     const token = ctx.getToken();
     if (!token || !token.trim()) {
-      throw new Error("supabaseForUser requires a verified OAuth token");
+      throw new Error("Not signed in.");
     }
     return {
       from: () => ({

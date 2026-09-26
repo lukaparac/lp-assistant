@@ -12,7 +12,7 @@ vi.mock("./supabase", () => ({
   supabaseForUser: (ctx: ToolContext) => {
     const token = ctx.getToken();
     if (!token || !token.trim()) {
-      throw new Error("supabaseForUser requires a verified OAuth token");
+      throw new Error("Not signed in.");
     }
     return { from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) };
   },
@@ -61,10 +61,10 @@ describe("supabaseForUser itself", () => {
   it("refuses an empty token even if a tool forgot to check", async () => {
     const { supabaseForUser } = await import("./supabase");
     expect(() => supabaseForUser(ctxFor({ authenticated: true, token: "" }))).toThrow(
-      /verified OAuth token/i,
+      /not signed in/i,
     );
     expect(() => supabaseForUser(ctxFor({ authenticated: true }))).toThrow(
-      /verified OAuth token/i,
+      /not signed in/i,
     );
   });
 });
