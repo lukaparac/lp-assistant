@@ -172,7 +172,8 @@ export async function handleChat(request: Request): Promise<Response> {
 
   let modelMessages;
   try {
-    modelMessages = await convertToModelMessages(history, { ignoreIncompleteToolCalls: true });
+    const forModel = await inlineTextFiles(history);
+    modelMessages = await convertToModelMessages(forModel, { ignoreIncompleteToolCalls: true });
   } catch (error) {
     console.error("Unable to read the incoming conversation:", error);
     return jsonError(400, "The conversation couldn't be read. Try sending your message again.");
