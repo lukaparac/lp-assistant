@@ -15,6 +15,13 @@
       "when": 1790462793501,
       "tag": "0001_lock_down_chat_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790463537748,
+      "tag": "0002_desk_owner_access",
+      "breakpoints": true
     }
   ]
 }
