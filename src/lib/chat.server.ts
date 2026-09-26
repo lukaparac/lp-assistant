@@ -161,6 +161,7 @@ export async function handleChat(request: Request): Promise<Response> {
     },
     onEnd: async ({ messages: all }) => {
       const last = all[all.length - 1];
+      console.log("[onEnd]", all.length, "last:", last?.role, "id:", last?.id, "parts:", Array.isArray(last?.parts) ? last.parts.length : typeof last?.parts);
       if (!last || last.role !== "assistant") return;
       try {
         // The streamed message can arrive without an id; the desk keys its
