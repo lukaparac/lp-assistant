@@ -17,3 +17,4 @@
 > only accepts images and PDFs as real files. Keep both steps — dropping either silently loses
 > documents from the answer.
 <!-- LOVABLE:END-PROJECT -->
+- MCP server (src/lib/mcp/) uses Supabase OAuth; desk reads go through RLS that allows only the admin role (first signed-up account) — keeps the no-login desk private to its owner.
