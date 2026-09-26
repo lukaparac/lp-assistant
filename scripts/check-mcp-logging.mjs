@@ -113,21 +113,26 @@ export function scanText(rel, text) {
   if (isExempt(rel)) return [];
   const findings = [];
   const lines = text.split("\n");
+  const shadowed = shadowedGlobals(lines);
   const aliases = new Map();
   for (const line of lines) {
     if (/^\s*(\/\/|\*)/.test(line)) continue;
     collectAliases(line, aliases);
   }
+  const ruleApplies = (label) =>
+    !(shadowed.has("console") && /console/.test(label)) &&
+    !(shadowed.has("process") && /process/.test(label));
   lines.forEach((line, i) => {
     if (/^\s*(\/\/|\*)/.test(line)) return; // skip comments
     for (const { re, label } of FORBIDDEN) {
       const m = line.match(re);
-      if (m) {
+      if (m && ruleApplies(label)) {
         findings.push({ line: i + 1, label: label.replace("$1", m[1]), source: line.trim() });
       }
     }
     if (ALIAS_BINDINGS.some((re) => re.test(line))) return; // binding line, not a call
     for (const [name, source] of aliases) {
+      if (!ruleApplies(source)) continue;
       const callRe = new RegExp(`(?<![.\\w$])${name}\\s*\\(`);
       if (callRe.test(line)) {
         findings.push({ line: i + 1, label: `aliased ${source} call via "${name}"`, source: line.trim() });
