@@ -50,6 +50,71 @@ function describeError(error: unknown): string {
   return detail || "Something went wrong while answering.";
 }
 
+/**
+ * The model only accepts images and PDFs as real files. Everything else a
+ * person drops on the desk (notes, CSVs, code, transcripts) is decoded here
+ * and handed over as text so it never gets lost on the way to the model.
+ */
+const MAX_INLINE_CHARS = 120_000;
+
+function decodeDataUrl(url: string): string | null {
+  const match = /^data:([^,]*),([\s\S]*)$/.exec(url);
+  if (!match) return null;
+
+  const [, meta, payload] = match;
+  try {
+    const text = meta.endsWith(";base64")
+      ? Buffer.from(payload, "base64").toString("utf8")
+      : decodeURIComponent(payload);
+    // A NUL byte near the front means this is not something to read as text.
+    if (text.slice(0, 1024).includes("\u0000")) return null;
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+function inlineFile(name: string, text: string) {
+  const body =
+    text.length > MAX_INLINE_CHARS
+      ? `${text.slice(0, MAX_INLINE_CHARS)}\n… the rest was cut off.`
+      : text;
+  return { type: "text", text: `\n<attached-file name="${name}">\n${body}\n</attached-file>\n` };
+}
+
+async function inlineTextFiles(messages: UIMessage[]): Promise<UIMessage[]> {
+  return Promise.all(
+    messages.map(async (message) => {
+      const parts = message.parts ?? [];
+      if (!parts.some((part) => part.type === "file")) return message;
+
+      const next: typeof parts = [];
+      for (const part of parts) {
+        if (part.type !== "file") {
+          next.push(part);
+          continue;
+        }
+
+        const media = typeof part.mediaType === "string" ? part.mediaType : "";
+        if (media.startsWith("image/") || media === "application/pdf") {
+          next.push(part);
+          continue;
+        }
+
+        const url = typeof part.url === "string" ? part.url : "";
+        const text = decodeDataUrl(url);
+        if (text === null) {
+          next.push(part);
+          continue;
+        }
+        next.push(inlineFile(part.filename ?? "attached file", text));
+      }
+
+      return { ...message, parts: next };
+    }),
+  );
+}
+
 async function persistMessages(messages: UIMessage[]) {
   const rows = messages
     .filter(
@@ -107,7 +172,8 @@ export async function handleChat(request: Request): Promise<Response> {
 
   let modelMessages;
   try {
-    modelMessages = await convertToModelMessages(history, { ignoreIncompleteToolCalls: true });
+    const forModel = await inlineTextFiles(history);
+    modelMessages = await convertToModelMessages(forModel, { ignoreIncompleteToolCalls: true });
   } catch (error) {
     console.error("Unable to read the incoming conversation:", error);
     return jsonError(400, "The conversation couldn't be read. Try sending your message again.");
