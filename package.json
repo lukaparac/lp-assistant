@@ -9,11 +9,12 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "vitest run && node scripts/check-mcp-logging.mjs",
+    "test": "vitest run && node scripts/check-mcp-logging.mjs && node scripts/check-vulnerable-deps.mjs",
     "format": "prettier --write ."
   },
   "overrides": {
-    "rolldown": "1.2.1"
+    "rolldown": "1.2.1",
+    "esbuild": "^0.28.2"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.75",
@@ -59,6 +60,7 @@
     "@tanstack/react-start": "1.168.32",
     "@tanstack/router-plugin": "1.168.23",
     "ai": "^7.0.116",
+    "brace-expansion": "^5.0.12",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -67,6 +69,7 @@
     "input-otp": "^1.4.2",
     "js-yaml": "^5.4.2",
     "lucide-react": "^0.575.0",
+    "minimatch": "^10.2.6",
     "motion": "^13.4.4",
     "nanoid": "^6.0.1",
     "react": "^19.2.0",
