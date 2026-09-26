@@ -117,14 +117,13 @@ describe("authenticated non-owner", () => {
 
   it("leaks nothing through any exposed tool", async () => {
     visibleRows = [];
-    const calls: Array<Promise<unknown>> = [
-      listRecentTurns.handler({ limit: 100 }, nonOwnerCtx),
-      searchDesk.handler({ query: "a", limit: 50 }, nonOwnerCtx),
-      searchDesk.handler({ query: "e", limit: 50 }, nonOwnerCtx),
+    const calls = [
+      Promise.resolve(listRecentTurns.handler({ limit: 100 }, nonOwnerCtx)),
+      Promise.resolve(searchDesk.handler({ query: "a", limit: 50 }, nonOwnerCtx)),
+      Promise.resolve(searchDesk.handler({ query: "e", limit: 50 }, nonOwnerCtx)),
     ];
     for (const call of calls) {
-      const result = (await call) as Parameters<typeof allText>[0];
-      expect(allText(result)).not.toMatch(/SECRET|acquisition|private-brief/);
+      expect(allText(await call)).not.toMatch(/SECRET|acquisition|private-brief/);
     }
   });
 });
