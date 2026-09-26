@@ -103,10 +103,16 @@ describe("OSV querying", () => {
 
 describe("runCheck end to end (mocked advisories)", () => {
   it("reports findings for a vulnerable lockfile", async () => {
-    const fakeFetch = async () => ({
-      ok: true,
-      json: async () => ({ results: [VULN_WITH_FIX, {}, {}, {}] }),
-    });
+    // Batch endpoint returns IDs only; the detail endpoint returns the full advisory.
+    const fakeFetch = async (url: string) => {
+      if (url.includes("/querybatch")) {
+        return {
+          ok: true,
+          json: async () => ({ results: [{ vulns: [{ id: "GHSA-2883-xcg3-v3hh" }] }, {}, {}, {}] }),
+        };
+      }
+      return { ok: true, json: async () => VULN_WITH_FIX.vulns[0] };
+    };
     // Write the fixture to a temp file for runCheck to read.
     const { writeFileSync, mkdtempSync } = await import("node:fs");
     const { join } = await import("node:path");
