@@ -27,11 +27,11 @@ const EXEMPT_RE = [/\.test\.ts$/, /\/__tests__\//];
 // console.error is the sanctioned path: error-capture.ts wraps it with the
 // redactor at import time. Everything else that emits output is a bypass.
 const FORBIDDEN = [
-  { re: /console\.(log|warn|info|debug|trace|group)\s*\(/, label: "raw console.$1 call (only console.error is redacted)" },
-  { re: /console\[["'](log|warn|info|debug|trace|group)["']\]\s*\(/, label: "bracket-notation console.$1 call" },
-  { re: /console\[[A-Za-z_$][\w$]*\]\s*\(/, label: "computed console[...] call" },
-  { re: /process\.std(out|err)\.write\s*\(/, label: "direct process.$1 write" },
-  { re: /process\.std(?:out|err)\[(?:["']write["']|[A-Za-z_$][\w$]*)\]\s*\(/, label: "computed process std stream write" },
+  { re: /console\??\.(log|warn|info|debug|trace|group)\s*\(/, label: "raw console.$1 call (only console.error is redacted)" },
+  { re: /console\??\.?\[["'](log|warn|info|debug|trace|group)["']\]\s*\(/, label: "bracket-notation console.$1 call" },
+  { re: /console\??\.?\[[A-Za-z_$][\w$]*\]\s*\(/, label: "computed console[...] call" },
+  { re: /process\??\.std(out|err)\??\.write\s*\(/, label: "direct process.$1 write" },
+  { re: /process\??\.std(?:out|err)\??\.?\[(?:["']write["']|[A-Za-z_$][\w$]*)\]\s*\(/, label: "computed process std stream write" },
   { re: /from\s+["'](pino|winston|bunyan|log4js|debug)["']/, label: "third-party logger import" },
 ];
 
