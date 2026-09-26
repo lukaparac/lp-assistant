@@ -72,12 +72,13 @@ const anonymousCtx = ctxFor(undefined);
 const nonOwnerCtx = ctxFor("token-for-a-stranger");
 const ownerCtx = ctxFor("token-for-the-owner");
 
-function allText(result: {
-  content: Array<{ type: string; text?: string }>;
-  structuredContent?: unknown;
-}) {
+function allText(result: unknown) {
+  const r = result as {
+    content?: Array<{ type?: string; text?: string }>;
+    structuredContent?: unknown;
+  };
   return (
-    result.content.map((c) => c.text ?? "").join("\n") + JSON.stringify(result.structuredContent)
+    (r.content ?? []).map((c) => c.text ?? "").join("\n") + JSON.stringify(r.structuredContent)
   );
 }
 
