@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run && node scripts/check-mcp-logging.mjs && node scripts/check-vulnerable-deps.mjs",
+    "typecheck": "tsgo --noEmit",
     "format": "prettier --write ."
   },
   "overrides": {
@@ -95,6 +96,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@typescript/native-preview": "^7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^5.2.0",
     "drizzle-kit": "^0.31.11",
     "drizzle-orm": "^0.45.3",
