@@ -331,7 +331,7 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
             <span className="font-mono text-ink-faint">3</span>
             <span>
               Paste it above. OpenAI bills you directly for every answer, so the account behind
-              your key needs credit; this desk never stores or forwards your key.
+              your key needs credit; this desk never stores or logs your key.
             </span>
           </li>
         </ol>
