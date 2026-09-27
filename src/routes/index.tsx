@@ -241,7 +241,7 @@ function Desk() {
 
   if (session === "out") {
     if (!visitorKey) return <VisitorGate onUnlock={setVisitorKey} />;
-    return <DeskApp visitor={{ key: visitorKey, forget: forgetKey }} />;
+    return <DeskApp initial={[]} visitor={{ key: visitorKey, forget: forgetKey }} />;
   }
   if (session === "loading") return <div className="h-dvh bg-paper" />;
   return <DeskLoaded />;
