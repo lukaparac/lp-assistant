@@ -342,7 +342,7 @@ function DeskLoaded() {
   return <DeskApp initial={history.data ?? []} />;
 }
 
-function DeskApp({ initial, visitor }: { initial: UIMessage[]; visitor?: Visitor }) {
+function DeskApp({ initial, visitor }: { initial: UIMessage[]; visitor?: Visitor | undefined }) {
   return (
     <PromptInputProvider>
       <DeskSurface initial={initial} visitor={visitor} />
@@ -352,7 +352,13 @@ function DeskApp({ initial, visitor }: { initial: UIMessage[]; visitor?: Visitor
 
 /* ---------------------------------------------------------------- the surface */
 
-function DeskSurface({ initial, visitor }: { initial: UIMessage[]; visitor?: Visitor }) {
+function DeskSurface({
+  initial,
+  visitor,
+}: {
+  initial: UIMessage[];
+  visitor?: Visitor | undefined;
+}) {
   const queryClient = useQueryClient();
   const { textInput, attachments } = usePromptInputController();
 
@@ -977,7 +983,7 @@ function SearchPanel({
   onAskClear: () => void;
   onCancelClear: () => void;
   onClear: () => void;
-  onForgetKey?: () => void;
+  onForgetKey?: (() => void) | undefined;
 }) {
   const needle = query.trim().toLowerCase();
 
