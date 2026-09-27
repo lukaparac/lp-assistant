@@ -10,3 +10,4 @@
 - [ ] GitHub ruleset: require CI workflow to pass before merging PRs (blocked: no GitHub connection / repo linked yet)
 - [x] Visitor key screen: short guide on getting an OpenAI API key + OpenAI bills them directly
 - [x] Fresh security scan of the published site; fix findings before sharing widely
+- [x] Privacy page: visitor keys stay in browser, OpenAI bills visitors directly

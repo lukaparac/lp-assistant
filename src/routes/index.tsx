@@ -339,6 +339,9 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
       <a className="text-sm font-medium text-brand underline" href="/login?next=/">
         Or sign in as the owner
       </a>
+      <a className="text-xs text-ink-soft underline" href="/privacy">
+        How your key is handled
+      </a>
     </div>
   );
 }
