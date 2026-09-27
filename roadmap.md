@@ -8,7 +8,7 @@
 - [x] GitHub Actions workflow: run tests + lockfile scan on PRs and push to main
 - [x] GitHub Actions workflow: weekly scheduled lockfile vulnerability scan
 - [ ] Connect project to GitHub and create the repository (editor step), then create and verify the main ruleset requiring CI to pass before merging
-- [ ] Re-run the deeper security review (Security tab) against the latest published changes
+- [ ] Re-run the deeper security review (Security tab) against the latest published changes (blocked: the deeper review only starts from the Security tab; the automated scan runs basic checks only)
 - [x] Visitor key screen: short guide on getting an OpenAI API key + OpenAI bills them directly
 - [x] Fresh security scan of the published site; fix findings before sharing widely
 - [x] Privacy page: visitor keys stay in browser, OpenAI bills visitors directly
