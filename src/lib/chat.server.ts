@@ -18,6 +18,13 @@ import {
 const GATEWAY_BASE_URL = "https://ai.gateway.lovable.dev/v1";
 const CHAT_MODEL = "openai/gpt-6-astra";
 
+/**
+ * Visitor mode reaches the same model through the caller's own key instead of
+ * the gateway. Same model, never a substitute — only the billing changes.
+ */
+const VISITOR_BASE_URL = "https://api.openai.com/v1";
+const VISITOR_MODEL = "gpt-6-astra";
+
 /** Guardrails so one browser tab can't grow the desk without limit. */
 const MAX_MESSAGES = 240;
 const MAX_BODY_BYTES = 40 * 1024 * 1024;
@@ -39,22 +46,40 @@ function jsonError(status: number, message: string) {
   return Response.json({ error: message }, { status });
 }
 
+/** Remove a visitor's own key from anything we might surface or log. */
+function scrubKey(text: string, key: string | null): string {
+  return key ? text.split(key).join("[redacted]") : text;
+}
+
 /** Translate gateway/SDK failures into something a person can act on. */
-function describeError(error: unknown): string {
+function describeError(error: unknown, visitorKey: string | null = null): string {
   const status = (error as { statusCode?: number } | undefined)?.statusCode;
   const detail = error instanceof Error ? error.message : String(error ?? "");
+  const visitor = visitorKey !== null;
 
   if (status === 401)
-    return "Lovable AI rejected this workspace's service key, so nothing was sent.";
+    return visitor
+      ? "Your key was rejected. Check that it's valid and still active, then resend."
+      : "Lovable AI rejected this workspace's service key, so nothing was sent.";
   if (status === 402)
-    return "Lovable AI has no credits left. Top up in Settings → Plans & credits, then resend.";
+    return visitor
+      ? "The account behind your key is out of credit. Top it up there, then resend."
+      : "Lovable AI has no credits left. Top up in Settings → Plans & credits, then resend.";
   if (status === 403)
-    return "Lovable AI refused this request. Nothing was changed — try rephrasing it.";
-  if (status === 404) return "Lovable AI could not find the model this desk is configured to use.";
-  if (status === 429) return "Lovable AI is rate-limited right now. Wait a few seconds and resend.";
+    return visitor
+      ? "The AI provider refused this request. Nothing was changed — try rephrasing it."
+      : "Lovable AI refused this request. Nothing was changed — try rephrasing it.";
+  if (status === 404)
+    return visitor
+      ? "The model this desk runs on isn't available to your key's account."
+      : "Lovable AI could not find the model this desk is configured to use.";
+  if (status === 429)
+    return visitor
+      ? "Your key is rate-limited right now. Wait a few seconds and resend."
+      : "Lovable AI is rate-limited right now. Wait a few seconds and resend.";
   if (status && status >= 500)
-    return "Lovable AI is having trouble at the moment. Try again shortly.";
-  return detail || "Something went wrong while answering.";
+    return "The AI provider is having trouble at the moment. Try again shortly.";
+  return scrubKey(detail, visitorKey) || "Something went wrong while answering.";
 }
 
 /**
@@ -158,12 +183,17 @@ async function loadPersistedHistory(): Promise<UIMessage[]> {
 }
 
 /**
- * Only text and files survive from the request body, and the turn is always a
- * user turn: roles are decided here, not by whoever sent the request.
+ * Only text and files survive from the request body. Roles are decided here,
+ * not by whoever sent the request — the owner path always forces "user".
  */
-function sanitizeIncoming(raw: unknown): UIMessage | null {
+function sanitizeMessage(raw: unknown, forcedRole?: "user"): UIMessage | null {
   if (!raw || typeof raw !== "object") return null;
-  const candidate = raw as { id?: unknown; parts?: unknown; metadata?: unknown };
+  const candidate = raw as {
+    id?: unknown;
+    role?: unknown;
+    parts?: unknown;
+    metadata?: unknown;
+  };
   if (!Array.isArray(candidate.parts)) return null;
 
   const parts = candidate.parts.flatMap((part): UIMessage["parts"] => {
@@ -193,15 +223,36 @@ function sanitizeIncoming(raw: unknown): UIMessage | null {
 
   if (parts.length === 0) return null;
 
+  const role = forcedRole ?? (candidate.role === "assistant" ? "assistant" : "user");
+
   return {
     id:
       typeof candidate.id === "string" && candidate.id.trim() ? candidate.id : crypto.randomUUID(),
-    role: "user",
+    role,
     parts,
     ...(candidate.metadata && typeof candidate.metadata === "object"
       ? { metadata: candidate.metadata as UIMessage["metadata"] }
       : {}),
   } as UIMessage;
+}
+
+/** A visitor's own API key, sent per request and never stored or logged. */
+function parseVisitorKey(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const key = raw.trim();
+  if (key.length < 20 || key.length > 400 || /\s/.test(key)) return null;
+  return key;
+}
+
+/**
+ * Visitor mode: the caller brings their own key and their own ephemeral
+ * history. Nothing here touches the desk's saved conversation.
+ */
+function sanitizeVisitorHistory(raw: unknown[]): UIMessage[] {
+  return raw
+    .slice(-MAX_MESSAGES)
+    .map((message) => sanitizeMessage(message))
+    .filter((message): message is UIMessage => message !== null);
 }
 
 async function persistMessages(messages: UIMessage[]) {
@@ -225,14 +276,6 @@ async function persistMessages(messages: UIMessage[]) {
 }
 
 export async function handleChat(request: Request): Promise<Response> {
-  const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) return jsonError(500, "Lovable AI isn't configured for this workspace yet.");
-
-  const { verifyDeskOwner } = await import("./desk-owner.server");
-  if (!(await verifyDeskOwner(request.headers.get("authorization")))) {
-    return jsonError(401, "Sign in as the desk's owner to use it.");
-  }
-
   if (
     (request.headers.get("content-length") ?? "") &&
     Number(request.headers.get("content-length")) > MAX_BODY_BYTES
@@ -250,7 +293,11 @@ export async function handleChat(request: Request): Promise<Response> {
   if (!body || typeof body !== "object")
     return jsonError(400, "The request body wasn't an object.");
 
-  const { messages, mode } = body as { messages?: unknown; mode?: unknown };
+  const { messages, mode, visitorKey: rawVisitorKey } = body as {
+    messages?: unknown;
+    mode?: unknown;
+    visitorKey?: unknown;
+  };
   if (!Array.isArray(messages) || messages.length === 0) {
     return jsonError(400, "Nothing was sent to answer.");
   }
@@ -261,42 +308,72 @@ export async function handleChat(request: Request): Promise<Response> {
     );
   }
 
-  // Only the newest turn is taken from the request, and always as a user turn.
-  const incoming = sanitizeIncoming(messages[messages.length - 1]);
-  if (!incoming) return jsonError(400, "That message couldn't be read. Try sending it again.");
-
-  let saved: UIMessage[];
-  try {
-    saved = await loadPersistedHistory();
-  } catch (error) {
-    console.error(error);
-    return jsonError(500, "The desk's saved conversation couldn't be opened just now.");
+  const visitorKey =
+    rawVisitorKey === undefined || rawVisitorKey === null ? null : parseVisitorKey(rawVisitorKey);
+  if (rawVisitorKey != null && visitorKey === null) {
+    return jsonError(400, "That key doesn't look usable. Check it and try again.");
   }
 
-  const history = [...saved.filter((message) => message.id !== incoming.id), incoming];
-  const modeName = modeLabel(mode);
+  const instructions = `${SYSTEM_PROMPT}\n\nMode: ${modeLabel(mode)}.\n${modeInstruction(mode)}`;
+
+  let history: UIMessage[];
+  let incoming: UIMessage | null = null;
+  let gateway: ReturnType<typeof createLovableAiGatewayRunIdFetch> | null = null;
+  let provider: ReturnType<typeof createOpenAI>;
+
+  if (visitorKey === null) {
+    const apiKey = process.env["LOVABLE_API_KEY"];
+    if (!apiKey) return jsonError(500, "Lovable AI isn't configured for this workspace yet.");
+
+    const { verifyDeskOwner } = await import("./desk-owner.server");
+    if (!(await verifyDeskOwner(request.headers.get("authorization")))) {
+      return jsonError(401, "Sign in as the desk's owner to use it.");
+    }
+
+    // Only the newest turn is taken from the request, and always as a user turn.
+    incoming = sanitizeMessage(messages[messages.length - 1], "user");
+    if (!incoming) return jsonError(400, "That message couldn't be read. Try sending it again.");
+
+    let saved: UIMessage[];
+    try {
+      saved = await loadPersistedHistory();
+    } catch (error) {
+      console.error(error);
+      return jsonError(500, "The desk's saved conversation couldn't be opened just now.");
+    }
+
+    history = [...saved.filter((message) => message.id !== incoming?.id), incoming];
+
+    gateway = createLovableAiGatewayRunIdFetch(getLovableAiGatewayRunId(request));
+    provider = createOpenAI({
+      baseURL: GATEWAY_BASE_URL,
+      apiKey,
+      headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
+      fetch: gateway.fetch,
+    });
+  } else {
+    // Visitor mode: the caller's own key, their own ephemeral history, and
+    // none of the workspace's AI credit. Nothing is verified against the desk
+    // and nothing is persisted.
+    history = sanitizeVisitorHistory(messages);
+    if (history.length === 0) {
+      return jsonError(400, "That message couldn't be read. Try sending it again.");
+    }
+
+    provider = createOpenAI({ baseURL: VISITOR_BASE_URL, apiKey: visitorKey });
+  }
 
   let modelMessages;
   try {
     const forModel = await inlineTextFiles(history);
     modelMessages = await convertToModelMessages(forModel, { ignoreIncompleteToolCalls: true });
   } catch (error) {
-    console.error("Unable to read the incoming conversation:", error);
+    console.error(error);
     return jsonError(400, "The conversation couldn't be read. Try sending your message again.");
   }
 
-  const instructions = `${SYSTEM_PROMPT}\n\nMode: ${modeName}.\n${modeInstruction(mode)}`;
-
-  const gateway = createLovableAiGatewayRunIdFetch(getLovableAiGatewayRunId(request));
-  const provider = createOpenAI({
-    baseURL: GATEWAY_BASE_URL,
-    apiKey,
-    headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-    fetch: gateway.fetch,
-  });
-
   const result = streamText({
-    model: provider.responses(CHAT_MODEL),
+    model: provider.responses(visitorKey === null ? CHAT_MODEL : VISITOR_MODEL),
     instructions,
     messages: modelMessages,
     tools: {
@@ -316,17 +393,25 @@ export async function handleChat(request: Request): Promise<Response> {
   });
 
   // Save what arrived first, but never make the answer wait for the write.
-  await persistMessages([incoming]).catch((error) => console.error(error));
+  // Visitor conversations are never saved anywhere.
+  if (incoming !== null) {
+    await persistMessages([incoming]).catch((error) => console.error(error));
+  }
 
   const streamResponse = result.toUIMessageStreamResponse({
     originalMessages: history,
     sendReasoning: true,
     sendSources: true,
     onError: (error) => {
-      console.error(error);
-      return describeError(error);
+      if (visitorKey !== null) {
+        console.error(scrubKey(error instanceof Error ? error.message : String(error), visitorKey));
+      } else {
+        console.error(error);
+      }
+      return describeError(error, visitorKey);
     },
     onEnd: async ({ messages: all }) => {
+      if (visitorKey !== null) return;
       const last = all[all.length - 1];
       if (!last || last.role !== "assistant") return;
       try {
@@ -339,5 +424,6 @@ export async function handleChat(request: Request): Promise<Response> {
     },
   });
 
+  if (gateway === null) return streamResponse;
   return withLovableAiGatewayRunIdHeader(streamResponse, gateway);
 }

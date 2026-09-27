@@ -1,5 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type FileUIPart, type UIMessage } from "ai";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -71,6 +79,20 @@ const SUGGESTIONS = [
       "Compare the practical trade-offs of renting a GPU versus running local inference for a part-time writing workflow. Give me numbers with dates.",
   },
 ];
+
+/* ----------------------------------------------------------- visitor access */
+
+const VISITOR_KEY_STORAGE = "marginalia-visitor-key";
+
+type Visitor = { key: string; forget: () => void };
+
+function readVisitorKey(): string | null {
+  try {
+    return sessionStorage.getItem(VISITOR_KEY_STORAGE);
+  } catch {
+    return null;
+  }
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -200,24 +222,89 @@ async function countTurns(): Promise<number> {
 
 function Desk() {
   const [session, setSession] = useState<"loading" | "in" | "out">("loading");
+  const [visitorKey, setVisitorKey] = useState<string | null>(null);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ? "in" : "out"));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ? "in" : "out"));
+    setVisitorKey(readVisitorKey());
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  const forgetKey = useCallback(() => {
+    try {
+      sessionStorage.removeItem(VISITOR_KEY_STORAGE);
+    } catch {
+      // Ignore storage failures; the gate still shows.
+    }
+    setVisitorKey(null);
+  }, []);
+
   if (session === "out") {
-    return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-paper px-6 text-center">
-        <h1 className="text-base font-semibold text-ink">This desk is private</h1>
-        <p className="max-w-sm text-sm text-ink-soft">Sign in as the desk's owner to open it.</p>
-        <a className="text-sm font-medium text-accent underline" href="/login?next=/">
-          Sign in
-        </a>
-      </div>
-    );
+    if (!visitorKey) return <VisitorGate onUnlock={setVisitorKey} />;
+    return <DeskApp initial={[]} visitor={{ key: visitorKey, forget: forgetKey }} />;
   }
   if (session === "loading") return <div className="h-dvh bg-paper" />;
   return <DeskLoaded />;
+}
+
+/** Signed-out visitors can still use the desk with their own API key. */
+function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const key = value.trim();
+    if (key.length < 20 || /\s/.test(key)) {
+      setError("That doesn't look like a full API key. Paste the whole thing.");
+      return;
+    }
+    try {
+      sessionStorage.setItem(VISITOR_KEY_STORAGE, key);
+    } catch {
+      // Storage unavailable — the desk still works for this visit.
+    }
+    onUnlock(key);
+  }
+
+  return (
+    <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-paper px-6 text-center">
+      <h1 className="text-base font-semibold text-ink">This desk is private</h1>
+      <p className="max-w-sm text-sm text-ink-soft">
+        The saved conversation belongs to the desk's owner. You can still use the desk with your
+        own OpenAI API key — answers are billed to your key, and this conversation lives only in
+        this tab. Nothing is saved.
+      </p>
+      <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-2">
+        <input
+          type="password"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setError(null);
+          }}
+          placeholder="Paste your OpenAI API key (sk-…)"
+          autoComplete="off"
+          spellCheck={false}
+          className="w-full rounded-xl border border-line bg-panel/70 px-3 py-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-brand"
+        />
+        {error ? (
+          <p role="alert" className="text-[12px] text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          className="rounded-xl bg-brand px-4 py-2.5 text-[13px] font-semibold text-paper transition-colors hover:bg-brand/90"
+        >
+          Open the desk with my key
+        </button>
+      </form>
+      <a className="text-sm font-medium text-accent underline" href="/login?next=/">
+        Or sign in as the owner
+      </a>
+    </div>
+  );
 }
 
 function DeskLoaded() {
@@ -255,17 +342,23 @@ function DeskLoaded() {
   return <DeskApp initial={history.data ?? []} />;
 }
 
-function DeskApp({ initial }: { initial: UIMessage[] }) {
+function DeskApp({ initial, visitor }: { initial: UIMessage[]; visitor?: Visitor | undefined }) {
   return (
     <PromptInputProvider>
-      <DeskSurface initial={initial} />
+      <DeskSurface initial={initial} visitor={visitor} />
     </PromptInputProvider>
   );
 }
 
 /* ---------------------------------------------------------------- the surface */
 
-function DeskSurface({ initial }: { initial: UIMessage[] }) {
+function DeskSurface({
+  initial,
+  visitor,
+}: {
+  initial: UIMessage[];
+  visitor?: Visitor | undefined;
+}) {
   const queryClient = useQueryClient();
   const { textInput, attachments } = usePromptInputController();
 
@@ -279,17 +372,25 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
     () =>
       new DefaultChatTransport({
         api: "/api/public/chat",
-        body: () => ({ mode: modeRef.current ?? null }),
+        body: () =>
+          visitor
+            ? { mode: modeRef.current ?? null, visitorKey: visitor.key }
+            : { mode: modeRef.current ?? null },
         headers: async (): Promise<Record<string, string>> => {
+          if (visitor) return {};
           const { data } = await supabase.auth.getSession();
           const token = data.session?.access_token;
           return token ? { Authorization: `Bearer ${token}` } : {};
         },
       }),
-    [],
+    [visitor],
   );
 
-  const chat = useChat({ id: "marginalia", messages: initial, transport });
+  const chat = useChat({
+    id: visitor ? "marginalia-visitor" : "marginalia",
+    messages: visitor ? [] : initial,
+    transport,
+  });
 
   const [turns, setTurns] = useState<number | undefined>(undefined);
   const [liveTimes, setLiveTimes] = useState<Record<string, string>>({});
@@ -310,8 +411,8 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
   }, []);
 
   useEffect(() => {
-    if (!busy) void refreshTurns();
-  }, [busy, refreshTurns, chat.messages.length]);
+    if (!busy && !visitor) void refreshTurns();
+  }, [busy, refreshTurns, chat.messages.length, visitor]);
 
   /* stamp assistant messages that arrive mid-session so the meta line is real */
   useEffect(() => {
@@ -391,6 +492,14 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
   }, [attachments, chat, mode, textInput]);
 
   const clearDesk = useCallback(async () => {
+    if (visitor) {
+      // A visitor's conversation only exists in this tab.
+      chat.setMessages([]);
+      setLiveTimes({});
+      setTurns(0);
+      setConfirmClear(false);
+      return;
+    }
     try {
       await clearDeskMessages();
     } catch {
@@ -402,7 +511,7 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
     setTurns(0);
     setConfirmClear(false);
     queryClient.setQueryData(["chat-history"], []);
-  }, [chat, queryClient]);
+  }, [chat, queryClient, visitor]);
 
   const jumpTo = useCallback((index: number) => {
     setSearchOpen(false);
@@ -437,7 +546,7 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
           >
             <SearchIcon className="size-4" />
           </button>
-          <StatusChip busy={busy} turns={turns} />
+          <StatusChip busy={busy} turns={turns} visitor={Boolean(visitor)} />
         </div>
       </header>
 
@@ -453,6 +562,7 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
           onAskClear={() => setConfirmClear(true)}
           onCancelClear={() => setConfirmClear(false)}
           onClear={clearDesk}
+          onForgetKey={visitor?.forget}
         />
       ) : null}
 
@@ -462,7 +572,11 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
             <>
               <ConversationEmptyState
                 title="The desk is clear"
-                description="Ask something, attach a document, or pick a mode below. Everything stays in this one conversation."
+                description={
+                  visitor
+                    ? "Ask something, attach a document, or pick a mode below. This conversation lives in this tab only — nothing is saved."
+                    : "Ask something, attach a document, or pick a mode below. Everything stays in this one conversation."
+                }
               />
               <div className="flex flex-wrap gap-2 pt-1">
                 {SUGGESTIONS.map((suggestion) => (
@@ -497,6 +611,7 @@ function DeskSurface({ initial }: { initial: UIMessage[] }) {
                     index={index}
                     live={liveTimes}
                     busy={busy}
+                    visitor={Boolean(visitor)}
                     streaming={
                       busy && index === chat.messages.length - 1 && message.role === "assistant"
                     }
@@ -609,7 +724,15 @@ function Mark() {
   );
 }
 
-function StatusChip({ busy, turns }: { busy: boolean; turns: number | undefined }) {
+function StatusChip({
+  busy,
+  turns,
+  visitor,
+}: {
+  busy: boolean;
+  turns: number | undefined;
+  visitor?: boolean;
+}) {
   return (
     <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-line/80 bg-panel/70 px-2.5 py-1 font-mono text-[10px] tracking-wide text-ink-faint uppercase">
       <span
@@ -619,10 +742,12 @@ function StatusChip({ busy, turns }: { busy: boolean; turns: number | undefined 
         )}
       />
       {busy
-        ? "saving"
-        : typeof turns === "number"
-          ? `saved · ${turns} ${turns === 1 ? "turn" : "turns"}`
-          : "saved"}
+        ? "working"
+        : visitor
+          ? "your key · not saved"
+          : typeof turns === "number"
+            ? `saved · ${turns} ${turns === 1 ? "turn" : "turns"}`
+            : "saved"}
     </span>
   );
 }
@@ -641,16 +766,27 @@ function Turn({
   message,
   index,
   live,
+  busy,
+  visitor,
   streaming,
 }: {
   message: UIMessage;
   index: number;
   live: Record<string, string>;
   busy: boolean;
+  visitor: boolean;
   streaming: boolean;
 }) {
   if (message.role === "user") return <UserTurn message={message} index={index} live={live} />;
-  return <AssistantTurn message={message} index={index} live={live} streaming={streaming} />;
+  return (
+    <AssistantTurn
+      message={message}
+      index={index}
+      live={live}
+      streaming={streaming}
+      visitor={visitor}
+    />
+  );
 }
 
 function UserTurn({
@@ -703,11 +839,13 @@ function AssistantTurn({
   index,
   live,
   streaming,
+  visitor,
 }: {
   message: UIMessage;
   index: number;
   live: Record<string, string>;
   streaming: boolean;
+  visitor: boolean;
 }) {
   const text = textOf(message);
   const reasoning = reasoningOf(message);
@@ -754,7 +892,11 @@ function AssistantTurn({
               />
               <ToolContent className="px-3 pb-3 text-[12px] text-ink-soft">
                 <p className="font-mono">
-                  {name === "web_search" ? "Lovable AI looked this up before answering." : name}
+                  {name === "web_search"
+                    ? visitor
+                      ? "Searched the web before answering, billed to your key."
+                      : "Lovable AI looked this up before answering."
+                    : name}
                 </p>
               </ToolContent>
             </Tool>
@@ -829,6 +971,7 @@ function SearchPanel({
   onAskClear,
   onCancelClear,
   onClear,
+  onForgetKey,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>;
   query: string;
@@ -840,6 +983,7 @@ function SearchPanel({
   onAskClear: () => void;
   onCancelClear: () => void;
   onClear: () => void;
+  onForgetKey?: (() => void) | undefined;
 }) {
   const needle = query.trim().toLowerCase();
 
@@ -896,33 +1040,44 @@ function SearchPanel({
           <p className="font-mono text-[10px] tracking-wide text-ink-faint uppercase">
             ⌘K opens · esc closes
           </p>
-          {confirmClear ? (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-ink-soft">Delete everything?</span>
+          <div className="flex items-center gap-1.5">
+            {onForgetKey ? (
               <button
                 type="button"
-                onClick={onClear}
-                className="rounded-lg bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground"
+                onClick={onForgetKey}
+                className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:bg-surface"
+              >
+                Forget my key
+              </button>
+            ) : null}
+            {confirmClear ? (
+              <>
+                <span className="text-[11px] text-ink-soft">Delete everything?</span>
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="rounded-lg bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground"
+                >
+                  Clear desk
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelClear}
+                  className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink-soft hover:bg-surface"
+                >
+                  Keep
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onAskClear}
+                className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-destructive/40 hover:text-destructive"
               >
                 Clear desk
               </button>
-              <button
-                type="button"
-                onClick={onCancelClear}
-                className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink-soft hover:bg-surface"
-              >
-                Keep
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onAskClear}
-              className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-destructive/40 hover:text-destructive"
-            >
-              Clear desk
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
