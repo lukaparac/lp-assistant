@@ -301,7 +301,7 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
         </button>
       </form>
       <div className="w-full max-w-sm rounded-2xl border border-line bg-panel/50 px-4 py-3 text-left">
-        <div className="font-mono text-[10px] tracking-wide text-ink-faint uppercase">
+        <div className="font-mono text-[10px] tracking-wide text-ink-soft uppercase">
           Getting a key
         </div>
         <ol className="mt-2 flex flex-col gap-2 text-[12px] leading-relaxed text-ink-soft">
