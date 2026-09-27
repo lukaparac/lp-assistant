@@ -718,7 +718,15 @@ function Mark() {
   );
 }
 
-function StatusChip({ busy, turns }: { busy: boolean; turns: number | undefined }) {
+function StatusChip({
+  busy,
+  turns,
+  visitor,
+}: {
+  busy: boolean;
+  turns: number | undefined;
+  visitor?: boolean;
+}) {
   return (
     <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-line/80 bg-panel/70 px-2.5 py-1 font-mono text-[10px] tracking-wide text-ink-faint uppercase">
       <span
@@ -728,10 +736,12 @@ function StatusChip({ busy, turns }: { busy: boolean; turns: number | undefined 
         )}
       />
       {busy
-        ? "saving"
-        : typeof turns === "number"
-          ? `saved · ${turns} ${turns === 1 ? "turn" : "turns"}`
-          : "saved"}
+        ? "working"
+        : visitor
+          ? "your key · not saved"
+          : typeof turns === "number"
+            ? `saved · ${turns} ${turns === 1 ? "turn" : "turns"}`
+            : "saved"}
     </span>
   );
 }
@@ -750,16 +760,27 @@ function Turn({
   message,
   index,
   live,
+  busy,
+  visitor,
   streaming,
 }: {
   message: UIMessage;
   index: number;
   live: Record<string, string>;
   busy: boolean;
+  visitor: boolean;
   streaming: boolean;
 }) {
   if (message.role === "user") return <UserTurn message={message} index={index} live={live} />;
-  return <AssistantTurn message={message} index={index} live={live} streaming={streaming} />;
+  return (
+    <AssistantTurn
+      message={message}
+      index={index}
+      live={live}
+      streaming={streaming}
+      visitor={visitor}
+    />
+  );
 }
 
 function UserTurn({
@@ -812,11 +833,13 @@ function AssistantTurn({
   index,
   live,
   streaming,
+  visitor,
 }: {
   message: UIMessage;
   index: number;
   live: Record<string, string>;
   streaming: boolean;
+  visitor: boolean;
 }) {
   const text = textOf(message);
   const reasoning = reasoningOf(message);
@@ -863,7 +886,11 @@ function AssistantTurn({
               />
               <ToolContent className="px-3 pb-3 text-[12px] text-ink-soft">
                 <p className="font-mono">
-                  {name === "web_search" ? "Lovable AI looked this up before answering." : name}
+                  {name === "web_search"
+                    ? visitor
+                      ? "Searched the web before answering, billed to your key."
+                      : "Lovable AI looked this up before answering."
+                    : name}
                 </p>
               </ToolContent>
             </Tool>
@@ -938,6 +965,7 @@ function SearchPanel({
   onAskClear,
   onCancelClear,
   onClear,
+  onForgetKey,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>;
   query: string;
@@ -949,6 +977,7 @@ function SearchPanel({
   onAskClear: () => void;
   onCancelClear: () => void;
   onClear: () => void;
+  onForgetKey?: () => void;
 }) {
   const needle = query.trim().toLowerCase();
 
@@ -1005,33 +1034,44 @@ function SearchPanel({
           <p className="font-mono text-[10px] tracking-wide text-ink-faint uppercase">
             ⌘K opens · esc closes
           </p>
-          {confirmClear ? (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-ink-soft">Delete everything?</span>
+          <div className="flex items-center gap-1.5">
+            {onForgetKey ? (
               <button
                 type="button"
-                onClick={onClear}
-                className="rounded-lg bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground"
+                onClick={onForgetKey}
+                className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:bg-surface"
+              >
+                Forget my key
+              </button>
+            ) : null}
+            {confirmClear ? (
+              <>
+                <span className="text-[11px] text-ink-soft">Delete everything?</span>
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="rounded-lg bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground"
+                >
+                  Clear desk
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelClear}
+                  className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink-soft hover:bg-surface"
+                >
+                  Keep
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onAskClear}
+                className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-destructive/40 hover:text-destructive"
               >
                 Clear desk
               </button>
-              <button
-                type="button"
-                onClick={onCancelClear}
-                className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink-soft hover:bg-surface"
-              >
-                Keep
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onAskClear}
-              className="rounded-lg border border-line px-2.5 py-1 text-[11px] font-medium text-ink-soft transition-colors hover:border-destructive/40 hover:text-destructive"
-            >
-              Clear desk
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

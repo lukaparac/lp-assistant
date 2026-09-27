@@ -18,3 +18,5 @@
 > documents from the answer.
 <!-- LOVABLE:END-PROJECT -->
 - MCP server (src/lib/mcp/) uses Supabase OAuth; desk reads go through RLS that allows only the admin role (first signed-up account) — keeps the no-login desk private to its owner.
+- Visitor mode (BYO key): `/api/public/chat` accepts a `visitorKey` in the body — ephemeral client-supplied history, direct provider call with the caller's key, never persisted and never logged (scrubbed from errors). Only the owner path may use the workspace's `LOVABLE_API_KEY` and `chat_messages`. Why: lets others use the desk without spending the owner's credits.
+- The CI logging check covers `src/lib/chat.server.ts`, so never add raw console.log/warn/info there — the visitor key must only ever pass through the redacted error path.
