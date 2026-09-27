@@ -7,6 +7,7 @@
 - [x] CI check: scan lockfile for known vulnerable dependency versions, fail when a fix is available
 - [x] GitHub Actions workflow: run tests + lockfile scan on PRs and push to main
 - [x] GitHub Actions workflow: weekly scheduled lockfile vulnerability scan
+- [x] GitHub Actions security workflow: dependency review, CodeQL, secret scan
 - [ ] Connect project to GitHub and create the repository (editor-only action: Plus menu → GitHub → Connect project → Create Repository; verified no API/tool path exists, account lukaparac currently has 0 repos), then create and verify the main ruleset requiring CI to pass before merging
 - [ ] Re-run the deeper security review (Security tab) against the latest published changes (blocked: the deeper review only starts from the Security tab; the automated scan runs basic checks only)
 - [x] Visitor key screen: short guide on getting an OpenAI API key + OpenAI bills them directly
