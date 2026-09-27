@@ -310,7 +310,7 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
             <span>
               Sign in at{" "}
               <a
-                className="font-medium text-accent underline"
+                className="font-medium text-brand underline"
                 href="https://platform.openai.com/api-keys"
                 target="_blank"
                 rel="noreferrer noopener"
@@ -336,7 +336,7 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
           </li>
         </ol>
       </div>
-      <a className="text-sm font-medium text-accent underline" href="/login?next=/">
+      <a className="text-sm font-medium text-brand underline" href="/login?next=/">
         Or sign in as the owner
       </a>
     </div>
