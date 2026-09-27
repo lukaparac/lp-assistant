@@ -11,3 +11,6 @@
 - [x] Visitor key screen: short guide on getting an OpenAI API key + OpenAI bills them directly
 - [x] Fresh security scan of the published site; fix findings before sharing widely
 - [x] Privacy page: visitor keys stay in browser, OpenAI bills visitors directly
+- [x] Publish privacy page + visitor-key changes to the live site; verify in a fresh browser
+- [ ] GitHub ruleset: require CI workflow to pass before merging PRs (blocked: user must create the repo via Plus menu → GitHub → Connect project)
+
