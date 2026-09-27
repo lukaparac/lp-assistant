@@ -268,7 +268,7 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
   }
 
   return (
-    <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-paper px-6 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 overflow-y-auto bg-paper px-6 py-10 text-center">
       <h1 className="text-base font-semibold text-ink">This desk is private</h1>
       <p className="max-w-sm text-sm text-ink-soft">
         The saved conversation belongs to the desk's owner. You can still use the desk with your
@@ -300,6 +300,42 @@ function VisitorGate({ onUnlock }: { onUnlock: (key: string) => void }) {
           Open the desk with my key
         </button>
       </form>
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-panel/50 px-4 py-3 text-left">
+        <div className="font-mono text-[10px] tracking-wide text-ink-faint uppercase">
+          Getting a key
+        </div>
+        <ol className="mt-2 flex flex-col gap-2 text-[12px] leading-relaxed text-ink-soft">
+          <li className="flex gap-2">
+            <span className="font-mono text-ink-faint">1</span>
+            <span>
+              Sign in at{" "}
+              <a
+                className="font-medium text-accent underline"
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                platform.openai.com/api-keys
+              </a>{" "}
+              with your own OpenAI account.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-mono text-ink-faint">2</span>
+            <span>
+              Choose <span className="text-ink">Create new secret key</span>, then copy it — the
+              value is shown once and starts with <span className="font-mono">sk-</span>.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="font-mono text-ink-faint">3</span>
+            <span>
+              Paste it above. OpenAI bills you directly for every answer, so the account behind
+              your key needs credit; this desk never stores or forwards your key.
+            </span>
+          </li>
+        </ol>
+      </div>
       <a className="text-sm font-medium text-accent underline" href="/login?next=/">
         Or sign in as the owner
       </a>
